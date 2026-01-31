@@ -8,7 +8,7 @@ Navigate a vast starfield, manage your weapon heat, and defend your ship against
 ## 🎮 Gameplay Video
 
 ```html
-<video src="GamePlay.mkv" controls width="800"></video>
+<video src="GamePlay.mp4" controls width="800"></video>
 ```
 
 ---
