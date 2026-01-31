@@ -7,12 +7,9 @@ Navigate a vast starfield, manage your weapon heat, and defend your ship against
 
 ## 🎮 Gameplay Video
 
-
 ```html
-<video src="Game Play.mkv" controls width="800"></video>
+<video src="GamePlay.mkv" controls width="800"></video>
 ```
-
-*Tip: While editing this README on GitHub, you can drag and drop your `.mp4` file directly into the editor. GitHub will upload it and give you the correct link automatically.*
 
 ---
 
