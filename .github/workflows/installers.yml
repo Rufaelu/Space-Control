@@ -1,0 +1,45 @@
+# Builds the Linux and Windows installers.
+# Runs on every push; also from the Actions tab ("Run workflow").
+# Download the installers from the finished run's Artifacts section.
+name: Installers
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl1-mesa-dev
+      - run: sh installer/build-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpaceControl-linux-installer
+          path: dist/*.run
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-go
+            mingw-w64-x86_64-nsis
+            mingw-w64-x86_64-binutils
+      - run: sh installer/build-windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpaceControl-windows-installer
+          path: dist/*.exe
