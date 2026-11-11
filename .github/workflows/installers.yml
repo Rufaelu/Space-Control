@@ -36,6 +36,7 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-go
+            mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-nsis
             mingw-w64-x86_64-binutils
       - run: sh installer/build-windows.sh

@@ -111,8 +111,8 @@ Uninstall with `~/.local/share/space-control/uninstall.sh`.
 
 ### 🪟 Windows
 
-In an MSYS2 MINGW64 shell with `mingw-w64-x86_64-gcc`, `mingw-w64-x86_64-go` and
-`mingw-w64-x86_64-nsis` installed:
+In an MSYS2 MINGW64 shell with `mingw-w64-x86_64-gcc`, `mingw-w64-x86_64-go`,
+`mingw-w64-x86_64-SDL2` and `mingw-w64-x86_64-nsis` installed:
 
 ```bash
 sh installer/build-windows.sh
