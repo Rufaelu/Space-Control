@@ -535,6 +535,7 @@ func (r *Renderer) Draw(g *Game) {
 		k := pt.Life / pt.Max
 		r.billboard(pt.Pos, pt.Size, pt.Col, pt.Bright*k*float32(math.Sqrt(float64(k))), pt.Shape)
 	}
+	pm := p.Model()
 	for _, s := range g.Shots {
 		dir := norm(s.Vel)
 		if s.Hostile {
@@ -542,7 +543,12 @@ func (r *Renderer) Draw(g *Game) {
 			r.billboard(s.Pos, 2.4, V3{1, 1, 1}, 4.0, 0)
 			r.beam(s.Pos.Sub(dir.Mul(12)), s.Pos, 1.6, s.Col, 2.0)
 		} else {
-			tail := s.Pos.Sub(dir.Mul(38))
+			// The streak grows out of the cannon that fired it. A fixed-length tail
+			// would reach back through the ship and past the chase camera, so new
+			// shots would look like they come out of the screen.
+			muzzle := pm.Mul4x1(playerGuns[s.Gun].Vec4(1)).Vec3()
+			l := mgl.Clamp(s.Pos.Sub(muzzle).Dot(dir), 0, 38)
+			tail := s.Pos.Sub(dir.Mul(l))
 			r.beam(tail, s.Pos, 2.6, s.Col, 2.6)
 			r.beam(tail, s.Pos, 0.8, V3{1, 1, 1}, 5.0)
 		}

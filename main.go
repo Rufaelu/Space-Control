@@ -130,6 +130,7 @@ func main() {
 			case pauseTitle:
 				game.Reset()
 				game.State = stateMenu
+				sdl.SetRelativeMouseMode(false) // the title screen has a button to click
 				sfx(sfxUISelect, 1)
 			case pauseQuit:
 				quit = true
@@ -147,6 +148,16 @@ func main() {
 				return
 			case *sdl.MouseMotionEvent:
 				game.Look(float32(e.XRel)*mouseSens, float32(e.YRel)*mouseSens)
+				if game.State == stateMenu {
+					x, y := mousePx(e.X, e.Y)
+					qx, qy, qw, qh := titleQuitRect(float32(rend.w), float32(rend.h))
+					if hover := inRect(x, y, qx, qy, qw, qh); hover != game.QuitHover {
+						game.QuitHover = hover
+						if hover {
+							sfx(sfxUIMove, 1)
+						}
+					}
+				}
 				if game.State == statePaused {
 					x, y := mousePx(e.X, e.Y)
 					if i := pauseItemAt(x, y, float32(rend.w), float32(rend.h)); i >= 0 && i != game.MenuSel {
@@ -159,7 +170,13 @@ func main() {
 					break
 				}
 				if game.State == stateMenu {
-					start()
+					x, y := mousePx(e.X, e.Y)
+					qx, qy, qw, qh := titleQuitRect(float32(rend.w), float32(rend.h))
+					if inRect(x, y, qx, qy, qw, qh) {
+						quit = true
+					} else {
+						start()
+					}
 				} else if game.State == statePaused && e.Button == sdl.BUTTON_LEFT {
 					x, y := mousePx(e.X, e.Y)
 					if i := pauseItemAt(x, y, float32(rend.w), float32(rend.h)); i >= 0 {
@@ -189,12 +206,10 @@ func main() {
 							sdl.StopTextInput()
 							sfx(sfxUISelect, 1)
 						}
-					case sdl.K_ESCAPE:
+					case sdl.K_ESCAPE: // back to the title, once there is a name to go back with
 						if game.Name != "" {
 							game.State = stateMenu
 							sdl.StopTextInput()
-						} else {
-							quit = true
 						}
 					}
 					break
@@ -204,11 +219,8 @@ func main() {
 				}
 				switch e.Keysym.Sym {
 				case sdl.K_ESCAPE, sdl.K_p:
+					// Esc never closes the game: that takes QUIT GAME or the window's close button
 					switch game.State {
-					case stateMenu:
-						if e.Keysym.Sym == sdl.K_ESCAPE {
-							quit = true
-						}
 					case stateRunning:
 						setPaused(true)
 					case statePaused:
@@ -257,6 +269,10 @@ func main() {
 				case sdl.K_m:
 					if game.State != stateName {
 						game.Music = !game.Music
+					}
+				case sdl.K_n:
+					if audio != nil {
+						audio.NextTrack()
 					}
 				case sdl.K_F2:
 					if game.State == stateMenu {
@@ -310,6 +326,7 @@ func main() {
 		if audio != nil {
 			audio.Listen(game)
 			audio.Pump()
+			game.SetTrack(audio.Track())
 		}
 
 		w, h := window.GLGetDrawableSize()
@@ -352,6 +369,7 @@ func runShot(g *Game, r *Renderer, hud *HUD, path string) {
 	wav := os.Getenv("SC_SHOT_WAV")
 	if wav != "" {
 		audio = newSynth()
+		audio.music.Block = true // render the songs in step, however fast the frames go
 	}
 	const dt = 1.0 / 60
 	for i := 0; i < int(secs*60); i++ {
@@ -379,6 +397,7 @@ func runShot(g *Game, r *Renderer, hud *HUD, path string) {
 		if wav != "" {
 			audio.Listen(g)
 			pcm = append(pcm, audio.render(sampleRate/60)...)
+			g.SetTrack(audio.Track())
 		}
 	}
 	if wav != "" {

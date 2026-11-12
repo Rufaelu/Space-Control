@@ -154,6 +154,7 @@ type Shot struct {
 	Life           float32
 	Hostile        bool
 	Col            V3
+	Gun            int // player shots: index into playerGuns of the cannon that fired it
 }
 
 type Particle struct {
@@ -246,9 +247,11 @@ type Game struct {
 	Note           string
 	NoteT          float32
 	NoteBad        bool
-	MenuSel        int  // highlighted pause-menu entry
-	Cockpit        bool // first-person view
-	Diff           int  // difficulty level
+	MenuSel        int    // highlighted pause-menu entry
+	QuitHover      bool   // mouse is over the title screen's QUIT GAME button
+	Track          string // song playing from the music folder, "" for the built-in soundtrack
+	Cockpit        bool   // first-person view
+	Diff           int    // difficulty level
 	Name           string
 	NameBuf        string // text being typed on the name screen
 	Rockets        []Rocket
@@ -656,10 +659,10 @@ func (g *Game) updatePlayer(dt float32, in Input) {
 		if p.RapidT > 0 {
 			col = V3{1.0, 0.6, 0.15}
 		}
-		for _, gp := range playerGuns {
+		for i, gp := range playerGuns {
 			pos := m.Mul4x1(gp.Vec4(1)).Vec3()
 			dir := norm(aim.Sub(pos))
-			g.Shots = append(g.Shots, Shot{Pos: pos, Prev: pos, Vel: dir.Mul(laserSpeed).Add(p.Vel.Mul(0.5)), Life: 1.6, Col: col})
+			g.Shots = append(g.Shots, Shot{Pos: pos, Prev: pos, Vel: dir.Mul(laserSpeed).Add(p.Vel.Mul(0.5)), Life: 1.6, Col: col, Gun: i})
 			g.addPart(Particle{Pos: pos.Add(dir.Mul(2)), Vel: p.Vel, Col: col, Size: 5, Life: 0.07, Max: 0.07, Bright: 5})
 		}
 	}

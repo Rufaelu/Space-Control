@@ -207,13 +207,27 @@ func (h *HUD) Draw(g *Game) {
 			"SPACE / LEFT CLICK - FIRE      SHIFT - BOOST",
 			"Q - FLIP LEFT      E - FLIP RIGHT      ALT / RIGHT CLICK - ROCKET      V - COCKPIT VIEW",
 			"A / D - CHANGE LEVEL      F2 - CHANGE NAME",
-			"ESC / P - PAUSE MENU      M - MUSIC      F - FULLSCREEN      ESC HERE - QUIT",
+			"ESC / P - PAUSE MENU      M - MUSIC      N - NEXT SONG      F - FULLSCREEN",
 		}
 		for i, l := range lines {
 			h.text(W/2, H*0.805+float32(i)*20*s, 1.8*s, l, fade(cCyan, 0.8), 1)
 		}
 		if g.HiScore > 0 {
 			h.text(W/2, H*0.16+144*s, 2*s, fmt.Sprintf("BEST %06d", g.HiScore), cWhite, 1)
+		}
+		// the only way out from here, besides the window's own close button
+		qx, qy, qw, qh := titleQuitRect(W, H)
+		if g.QuitHover {
+			h.rect(qx, qy, qw, qh, fade(cRed, 0.30))
+			h.rect(qx, qy+qh-3*s, qw, 3*s, cRed)
+			h.glowText(qx+qw/2, qy+qh/2-7*s, 2.2*s, "QUIT GAME", cWhite, 1)
+		} else {
+			h.rect(qx, qy, qw, qh, RGBA{0, 0, 0, 0.45})
+			h.rect(qx, qy+qh-2*s, qw, 2*s, fade(cCyan, 0.5))
+			h.text(qx+qw/2, qy+qh/2-7*s, 2.2*s, "QUIT GAME", fade(cCyan, 0.8), 1)
+		}
+		if g.Track != "" {
+			h.text(28*s, H-34*s, 1.8*s, "NOW PLAYING  "+g.Track, fade(cAmber, 0.8), 0)
 		}
 	case stateName:
 		h.glowText(W/2, H*0.16, 11*s, "SPACE CONTROL", cCyan, 1)
@@ -286,6 +300,15 @@ func (h *HUD) Draw(g *Game) {
 	r.hudB.flush()
 	gl.Disable(gl.BLEND)
 }
+
+// titleQuitRect is the QUIT GAME button in the title screen's top-right corner.
+func titleQuitRect(W, H float32) (x, y, w, h float32) {
+	s := H / 720
+	w, h = 160*s, 38*s
+	return W - w - 24*s, 24 * s, w, h
+}
+
+func inRect(px, py, x, y, w, h float32) bool { return px >= x && px <= x+w && py >= y && py <= y+h }
 
 // pauseItemRect is the on-screen box of pause-menu entry i.
 func pauseItemRect(i int, W, H float32) (x, y, w, h float32) {

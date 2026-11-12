@@ -7,7 +7,8 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
-// All sound is synthesized at runtime; there are no audio files.
+// All sound is synthesized at runtime, except songs the player puts in the
+// music folder (see music.go), which replace the built-in soundtrack.
 // Output is stereo: one-shot effects and continuous engine loops are
 // panned and faded by where their source is relative to the player.
 
@@ -103,6 +104,7 @@ type Audio struct {
 	musicDuck float32
 	seqT      float32
 	seqStep   int
+	music     *MusicPlayer // songs from the music folder
 }
 
 var audio *Audio
@@ -149,7 +151,23 @@ func newSynth() *Audio {
 	for i := range a.loops {
 		a.loops[i].pitch, a.loops[i].pt = 1, 1
 	}
+	a.music = NewMusicPlayer(musicDir())
 	return a
+}
+
+// Track is the title of the song playing from the music folder, or "".
+func (a *Audio) Track() string {
+	if a.MusicOn && a.music.Active() {
+		return a.music.Title
+	}
+	return ""
+}
+
+// NextTrack skips to the next song in the music folder.
+func (a *Audio) NextTrack() {
+	if a.music.Active() {
+		a.music.Skip()
+	}
 }
 
 // Listen updates the listener and every engine loop from the game state.
@@ -340,6 +358,7 @@ func (a *Audio) render(n int) []byte {
 	for i, d := range engineDefs {
 		coef[i] = lpCoef(d.cutoff)
 	}
+	custom := a.music.Active()
 
 	for i := 0; i < n; i++ {
 		var left, right float32
@@ -352,10 +371,16 @@ func (a *Audio) render(n int) []byte {
 		a.seqT += dt
 		if a.seqT >= stepLen {
 			a.seqT -= stepLen
-			if a.MusicOn {
+			if a.MusicOn && !custom {
 				a.musicStep()
 			}
 			a.seqStep = (a.seqStep + 1) % (64 * 2)
+		}
+		if custom && a.MusicOn {
+			if l, r, ok := a.music.next(); ok {
+				left += l * musicGain * a.musicDuck
+				right += r * musicGain * a.musicDuck
+			}
 		}
 
 		// --- own engine: a low twin-oscillator drone plus thrust hiss ---

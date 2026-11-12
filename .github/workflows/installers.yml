@@ -12,11 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl1-mesa-dev
-      - run: sh installer/build-linux.sh
+      # builds in an Ubuntu 22.04 container with SDL2 bundled: runs there and on anything newer
+      - run: sh installer/build-installers.sh linux
       - uses: actions/upload-artifact@v4
         with:
           name: SpaceControl-linux-installer

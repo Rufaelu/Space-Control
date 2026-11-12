@@ -31,6 +31,7 @@ Navigate a vast starfield, manage your weapon heat, and defend your ship against
 - 🏆 **Combo multiplier and saved high score**
 - 🔊 **Synthesized stereo sound** — every ship class has its own engine note, placed left/right and pitched by how fast it is closing; plus lasers, explosions and alerts
 - 🎵 **Original soundtrack** — a driving synth loop generated in code that picks up in combat and boss fights
+- 🎧 **Your own music** — drop MP3, OGG or WAV songs in the `music` folder and the game plays them instead
 - ⏸ **Pause menu** — resume, restart, volume, quit to title, quit game
 - 📡 **On-screen HUD** — radar, heat gauge, target brackets, off-screen threat arrows
 - ☄️ **Asteroid field** — rocks block shots and damage your ship; shoot them and they shatter into smaller pieces
@@ -52,9 +53,29 @@ Navigate a vast starfield, manage your weapon heat, and defend your ship against
 | **Esc / P** | Pause menu (resume, restart, volume, engine loudness, music, quit) |
 | **F / F11** | Toggle Fullscreen |
 | **M** | Music on/off |
+| **N** | Next song (when playing your own music) |
 | **A / D** (title screen) | Change level |
 | **F2** (title screen) | Change your name |
 | **R** | Restart (After your ship is destroyed) |
+
+To quit, click **QUIT GAME** on the title screen, choose **QUIT GAME** in the pause menu,
+or close the window. Esc never closes the game.
+
+---
+
+## 🎧 Your Own Music
+
+The game plays every MP3, OGG and WAV file in its `music` folder, in random order, instead
+of the built-in soundtrack. A song added while the game is running plays next; with the
+folder empty, the built-in soundtrack comes back.
+
+| Installed on | Music folder |
+|--------------|--------------|
+| Windows | `%LOCALAPPDATA%\Programs\SpaceControl\music` (Start menu → Space Control → Space Control Music Folder) |
+| Linux | `~/.local/share/space-control/music` (applications menu → right-click Space Control → Open Music Folder) |
+| Running from source | `music/` in the project folder |
+
+Uninstalling keeps the songs you added.
 
 ---
 
@@ -98,7 +119,26 @@ go run .
 
 Both installers ask for your name, which the game uses to congratulate you.
 
-### 🐧 Linux
+### 📀 Installers for another PC (recommended)
+
+With [Docker](https://docs.docker.com/get-docker/) running, on Linux:
+
+```bash
+sh installer/build-installers.sh            # both; or add: linux | windows
+```
+
+This builds, in containers, installers that carry everything the game needs, so nothing
+has to be installed on the other PC first:
+
+- `dist/SpaceControl-windows-x86_64-setup.exe` — Windows 10/11, 64-bit
+- `dist/SpaceControl-linux-x86_64-installer.run` — 64-bit desktop Linux from 2022 on:
+  Ubuntu 22.04+, Debian 12+, Fedora 36+, Mint 21+, Arch (built against glibc 2.35, with SDL2 inside)
+- `dist/HOW-TO-INSTALL.txt` — install steps for the person at the other PC
+
+Copy the `dist` folder to the other PC. The first build takes a few minutes while the
+toolchains download; later builds reuse them.
+
+### 🐧 Linux (using this machine's SDL2)
 
 ```bash
 sh installer/build-linux.sh
@@ -106,10 +146,11 @@ sh dist/SpaceControl-linux-x86_64-installer.run
 ```
 
 Installs for the current user (no sudo) into `~/.local/share/space-control`, adds a
-`space-control` command and an applications-menu entry. The system needs SDL2 installed.
+`space-control` command and an applications-menu entry. Built this way the installed game
+uses the system's SDL2; `installer/build-installers.sh` makes one that carries its own.
 Uninstall with `~/.local/share/space-control/uninstall.sh`.
 
-### 🪟 Windows
+### 🪟 Windows (on a Windows machine)
 
 In an MSYS2 MINGW64 shell with `mingw-w64-x86_64-gcc`, `mingw-w64-x86_64-go`,
 `mingw-w64-x86_64-SDL2` and `mingw-w64-x86_64-nsis` installed:

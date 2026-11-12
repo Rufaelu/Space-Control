@@ -6,7 +6,7 @@ import "math"
 
 // Hard points on the player model, in model space.
 var (
-	playerGuns    = [2]V3{{-7.5, -0.5, 0.0}, {7.5, -0.5, 0.0}}
+	playerGuns    = [2]V3{{-7.5, -0.5, -0.75}, {7.5, -0.5, -0.75}} // wingtip cannon muzzles
 	playerEngines = [2]V3{{-1.75, -0.15, 6.3}, {1.75, -0.15, 6.3}}
 )
 

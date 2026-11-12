@@ -1,0 +1,46 @@
+SPACE CONTROL - HOW TO INSTALL
+==============================
+
+Copy this folder to the other PC (a USB stick works), then use the
+installer for that PC. Each one carries everything the game needs: there is
+nothing else to download or install, and no administrator password is asked.
+
+WINDOWS (10 or 11, 64-bit)
+--------------------------
+  1. Double-click  SpaceControl-windows-x86_64-setup.exe
+     If Windows shows "Windows protected your PC", click "More info", then
+     "Run anyway" (the installer is not code-signed).
+  2. Type your pilot name, click Next, then Install.
+  3. Start the game from the desktop icon or the Start menu.
+
+  Uninstall: Settings > Apps > Space Control, or Start menu > Space Control
+  > Uninstall Space Control.
+
+LINUX (64-bit; Ubuntu 22.04+, Debian 12+, Fedora 36+, Mint 21+, Arch...)
+--------------------------------------------------------------------------
+  1. Open a terminal in this folder and run:
+         sh SpaceControl-linux-x86_64-installer.run
+  2. Type your pilot name.
+  3. Start the game from your applications menu (Space Control), or run
+         ~/.local/share/space-control/SpaceControl
+
+  Uninstall:  ~/.local/share/space-control/uninstall.sh
+
+YOUR OWN MUSIC
+--------------
+The game has a music folder. Put MP3, OGG or WAV songs in it and the game
+plays them instead of its built-in soundtrack (in random order; a song added
+while the game runs plays next). Press N in the game to skip a song, M to turn
+music on or off.
+
+  Windows:  Start menu > Space Control > Space Control Music Folder
+            (it is %LOCALAPPDATA%\Programs\SpaceControl\music)
+  Linux:    ~/.local/share/space-control/music
+            (right-click Space Control in the applications menu > Open Music Folder)
+
+Uninstalling keeps the songs you added.
+
+QUITTING
+--------
+Click QUIT GAME on the title screen, choose QUIT GAME in the pause menu (Esc),
+or close the window.

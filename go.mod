@@ -5,5 +5,9 @@ go 1.24.9
 require (
 	github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71
 	github.com/go-gl/mathgl v1.2.0
+	github.com/hajimehoshi/go-mp3 v0.3.4
+	github.com/jfreymuth/oggvorbis v1.0.5
 	github.com/veandco/go-sdl2 v0.4.40
 )
+
+require github.com/jfreymuth/vorbis v1.0.2 // indirect

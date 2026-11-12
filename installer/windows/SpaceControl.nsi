@@ -1,6 +1,7 @@
 ; Space Control installer for Windows (NSIS 3).
-; Build the game into build\windows first (installer\build-windows.sh or the
-; GitHub workflow does both steps), then:  makensis installer\windows\SpaceControl.nsi
+; Build the game into build\windows first, then:  makensis installer\windows\SpaceControl.nsi
+; installer/build-installers.sh (Docker, on Linux), installer/build-windows.sh
+; (MSYS2, on Windows) and the GitHub workflow do both steps.
 ; Installs per user; no administrator rights needed.
 
 Unicode true
@@ -27,6 +28,10 @@ Page custom NamePageShow NamePageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch ${APP}"
+!define MUI_FINISHPAGE_TEXT "${APP} is installed.$\r$\n$\r$\nTo play your own music, put MP3, OGG or WAV songs in the game's music folder. Start menu > ${APP} > ${APP} Music Folder opens it."
+!define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\music"
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Open the music folder (add your own songs)"
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
@@ -70,6 +75,7 @@ Section "Install"
 
   CreateDirectory "$SMPROGRAMS\${APP}"
   CreateShortcut "$SMPROGRAMS\${APP}\${APP}.lnk" "$INSTDIR\${EXE}"
+  CreateShortcut "$SMPROGRAMS\${APP}\${APP} Music Folder.lnk" "$INSTDIR\music"
   CreateShortcut "$SMPROGRAMS\${APP}\Uninstall ${APP}.lnk" "$INSTDIR\Uninstall.exe"
   CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}"
 
@@ -85,6 +91,7 @@ SectionEnd
 Section "Uninstall"
   SetShellVarContext current
   Delete "$SMPROGRAMS\${APP}\${APP}.lnk"
+  Delete "$SMPROGRAMS\${APP}\${APP} Music Folder.lnk"
   Delete "$SMPROGRAMS\${APP}\Uninstall ${APP}.lnk"
   RMDir "$SMPROGRAMS\${APP}"
   Delete "$DESKTOP\${APP}.lnk"
@@ -93,6 +100,9 @@ Section "Uninstall"
   Delete "$INSTDIR\README.txt"
   Delete "$INSTDIR\*.dll"
   Delete "$INSTDIR\Uninstall.exe"
+  ; the music folder goes only if the player left no songs in it
+  Delete "$INSTDIR\music\README.txt"
+  RMDir "$INSTDIR\music"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "${REGKEY}"
   ; the name and high score in %AppData%\space-control are kept

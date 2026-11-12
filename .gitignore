@@ -1,2 +1,6 @@
 build/
 dist/
+
+# your own songs stay out of git; the folder ships with its README
+music/*
+!music/README.txt

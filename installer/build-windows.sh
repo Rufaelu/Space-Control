@@ -7,9 +7,12 @@
 # (go-sdl2's bundled static SDL2 no longer links with current MinGW toolchains.)
 set -eu
 cd "$(dirname "$0")/.."
+rm -rf build/windows
 mkdir -p build/windows dist
 CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -H windowsgui" -o build/windows/SpaceControl.exe .
 cp README.md build/windows/README.txt
+mkdir -p build/windows/music
+cp music/README.txt build/windows/music/README.txt
 
 # ship every DLL the exe pulls in from the MinGW tree, including indirect ones
 PREFIX="${MINGW_PREFIX:-/mingw64}"
