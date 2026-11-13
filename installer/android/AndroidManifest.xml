@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Space Control for Android 11+ (minSdk 30), landscape only.
+     installer/android/build-android.sh fills in the version numbers. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.spacecontrol.game"
+    android:versionCode="@VERSION_CODE@"
+    android:versionName="@VERSION_NAME@"
+    android:installLocation="auto">
+
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
+    <uses-feature android:name="android.hardware.screen.landscape" android:required="true" />
+
+    <!-- to play songs from the phone's Music folder -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- buzz on hits, rockets, boosts (granted at install, no prompt) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:label="Space Control"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:hasCode="true"
+        android:extractNativeLibs="true"
+        android:hardwareAccelerated="true"
+        android:appCategory="game"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+
+        <activity
+            android:name="com.spacecontrol.game.SpaceControlActivity"
+            android:label="Space Control"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:screenOrientation="sensorLandscape"
+            android:preferMinimalPostProcessing="true"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -39,17 +39,37 @@ const (
 	maxParticles = 7000
 )
 
-// Pause menu entries.
+// Pause menu entries. Game.Menu lists the ones this platform shows, in order.
 const (
 	pauseResume = iota
 	pauseRestart
 	pauseVolume
 	pauseEngine
 	pauseMusic
+	pauseNextSong
+	pauseMotion
+	pauseTurn
+	pauseRecenter
+	pauseAssist
+	pauseAutoFire
+	pauseVibrate
 	pauseTitle
 	pauseQuit
-	pauseCount
 )
+
+// pauseMenu is the pause menu on desktops, and with the touch controls.
+func pauseMenu(touch bool) []int {
+	if touch {
+		return []int{pauseResume, pauseRestart, pauseVolume, pauseEngine, pauseMusic, pauseNextSong,
+			pauseMotion, pauseTurn, pauseRecenter, pauseAssist, pauseAutoFire, pauseVibrate, pauseTitle, pauseQuit}
+	}
+	return []int{pauseResume, pauseRestart, pauseVolume, pauseEngine, pauseMusic, pauseTitle, pauseQuit}
+}
+
+// adjustable pause entries take left/right (or a tap on their - and + ends)
+func adjustable(item int) bool {
+	return item == pauseVolume || item == pauseEngine || item == pauseTurn
+}
 
 const (
 	kDrone = iota
@@ -247,7 +267,15 @@ type Game struct {
 	Note           string
 	NoteT          float32
 	NoteBad        bool
-	MenuSel        int    // highlighted pause-menu entry
+	MenuSel        int    // highlighted pause-menu entry: an index into Menu
+	Menu           []int  // pause-menu entries shown
+	Touch          bool   // phone controls and layout
+	Motion         int    // motionOff, motionTilt or motionGyro: how moving the phone turns the ship
+	TurnSpeed      int    // 1..10, how fast dragging and tilting turn
+	Assist         bool   // touch aim assist: slow down and pull onto targets near the crosshair
+	AutoFire       bool   // fire by itself when the crosshair is on an enemy
+	Vibrate        bool   // phone vibration on hits, rockets, boosts...
+	Tracked        *Enemy // enemy the TRACK button is swinging the ship onto
 	QuitHover      bool   // mouse is over the title screen's QUIT GAME button
 	Track          string // song playing from the music folder, "" for the built-in soundtrack
 	Cockpit        bool   // first-person view
@@ -310,7 +338,8 @@ func saveHiScore(n int) {
 }
 
 func NewGame() *Game {
-	g := &Game{HiScore: loadHiScore(), Volume: 7, EngineVol: 10, Music: true, Diff: diffNormal, Name: loadName()}
+	g := &Game{HiScore: loadHiScore(), Volume: 7, EngineVol: 10, Music: true, Diff: diffNormal, Name: loadName(),
+		Menu: pauseMenu(false), Motion: motionTilt, TurnSpeed: 5, Assist: true, Vibrate: true}
 	for i := 0; i < 420; i++ {
 		g.Dust = append(g.Dust, V3{rnd() * 400, rnd() * 400, rnd() * 400})
 	}
@@ -325,7 +354,7 @@ func NewGame() *Game {
 func (g *Game) Reset() {
 	g.P = Player{Yaw: -90, Shields: maxShields, Rockets: diffs[g.Diff].rockets}
 	g.Enemies, g.Shots, g.Parts, g.Pickups = nil, nil, nil, nil
-	g.Rockets, g.Lock = nil, nil
+	g.Rockets, g.Lock, g.Tracked = nil, nil, nil
 	g.Score, g.Combo, g.ComboT, g.Wave, g.Kills = 0, 0, 0, 0, 0
 	g.queue, g.waveT, g.spawnT = nil, 2.0, 0
 	g.Banner, g.BannerT, g.Note, g.NoteT = "", 0, "", 0
@@ -431,6 +460,7 @@ func (g *Game) hurtPlayer() {
 	p.Shields--
 	p.Invuln = 1.2
 	sfx(sfxHurt, 1)
+	g.buzz(0.8, 120)
 	g.Shake, g.HitFx = 1, 1
 	g.Combo, g.ComboT = 0, 0
 	g.addPart(Particle{Pos: p.Pos, Col: V3{0.3, 0.7, 1}, Size: 4, Grow: 90, Life: 0.35, Max: 0.35, Bright: 3, Shape: 1})
@@ -438,6 +468,7 @@ func (g *Game) hurtPlayer() {
 		g.explode(p.Pos, 2.2, V3{0.4, 0.8, 1})
 		g.State = stateGameOver
 		g.Shake = 1.6
+		g.buzz(1, 450)
 		sfx(sfxGameOver, 1)
 		if g.Score > g.HiScore {
 			g.HiScore, g.NewHi = g.Score, true
@@ -466,6 +497,9 @@ func (g *Game) killEnemy(e *Enemy) {
 	case kBoss:
 		drops, chance = 3, 1
 		g.banner("DREADNOUGHT DESTROYED", "", 3)
+		g.buzz(1, 350)
+	default:
+		g.buzz(0.3, 25)
 	}
 	for i := 0; i < drops; i++ {
 		if rnd() < chance {
@@ -587,6 +621,7 @@ func (g *Game) updatePlayer(dt float32, in Input) {
 		}
 		p.FlipT, p.FlipCD = flipTime, flipCD
 		sfx(sfxBoost, 0.7)
+		g.buzz(0.4, 40)
 	}
 	p.FlipT -= dt
 
@@ -595,6 +630,7 @@ func (g *Game) updatePlayer(dt float32, in Input) {
 	if in.Boost && p.BoostCD <= 0 {
 		p.BoostT, p.BoostCD = boostTime, boostCD
 		sfx(sfxBoost, 1)
+		g.buzz(0.55, 60)
 		g.Shake = float32(math.Max(float64(g.Shake), 0.25))
 		g.addPart(Particle{Pos: p.Pos.Sub(f.Mul(6)), Col: V3{1, 0.7, 0.3}, Size: 3, Grow: 110, Life: 0.3, Max: 0.3, Bright: 3, Shape: 1})
 	}
@@ -650,6 +686,7 @@ func (g *Game) updatePlayer(dt float32, in Input) {
 		if p.Heat >= 1 {
 			p.Heat, p.Overheated = 1, true
 			sfx(sfxOverheat, 1)
+			g.buzz(0.6, 160)
 			g.Note, g.NoteT, g.NoteBad = "WEAPONS OVERHEATED", 1.5, true
 		}
 		aim := p.Pos.Add(f.Mul(600))
@@ -918,6 +955,7 @@ func (g *Game) updatePickups(dt float32) {
 			}
 			g.Score += 5
 			sfx(sfxPickup, 1)
+			g.buzz(0.3, 30)
 			g.Note, g.NoteT, g.NoteBad = puNames[pu.Kind], 2, false
 			g.addPart(Particle{Pos: p.Pos, Col: puCols[pu.Kind], Size: 4, Grow: 120, Life: 0.4, Max: 0.4, Bright: 3, Shape: 1})
 			continue

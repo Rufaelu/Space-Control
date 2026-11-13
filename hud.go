@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/go-gl/gl/v4.1-core/gl"
+	"game/internal/gl"
 )
 
 type RGBA = [4]float32
@@ -70,8 +70,9 @@ var glyphs = map[rune][7]string{
 }
 
 type HUD struct {
-	r *Renderer
-	s float32 // UI scale
+	r     *Renderer
+	s     float32 // UI scale
+	touch *Touch  // phone controls to draw, or nil
 }
 
 func (h *HUD) vert(x, y float32, c RGBA) {
@@ -174,123 +175,26 @@ func (h *HUD) bar(x, y, w, hh, frac float32, c RGBA, segs int) {
 func (h *HUD) Draw(g *Game) {
 	r := h.r
 	W, H := float32(r.w), float32(r.h)
-	h.s = H / 720
-	s := h.s
+	h.s = h.scale(H)
 	blinkOn := int(g.Time*6)%2 == 0
 
 	switch g.State {
 	case stateMenu:
-		h.glowText(W/2, H*0.16, 11*s, "SPACE CONTROL", cCyan, 1)
-		h.text(W/2, H*0.16+92*s, 2.5*s, "HOLD THE LINE. WATCH YOUR HEAT.", cWhite, 1)
-		if g.Name != "" {
-			h.text(W/2, H*0.16+120*s, 2.2*s, "PILOT  "+g.Name, cAmber, 1)
-		}
-		// difficulty level picker
-		ly := H * 0.645
-		h.rect(W/2-280*s, ly-8*s, 560*s, 66*s, RGBA{0, 0, 0, 0.45})
-		h.text(W/2, ly, 1.8*s, "LEVEL", fade(cCyan, 0.8), 1)
-		for i, d := range diffs {
-			x := W/2 + float32(i-1)*170*s
-			if i == g.Diff {
-				h.rect(x-70*s, ly+18*s, 140*s, 32*s, fade(cCyan, 0.18))
-				h.rect(x-70*s, ly+48*s, 140*s, 2*s, cCyan)
-				h.glowText(x, ly+24*s, 3*s, d.name, cWhite, 1)
-			} else {
-				h.text(x, ly+24*s, 3*s, d.name, fade(cCyan, 0.6), 1)
-			}
-		}
-		if blinkOn {
-			h.glowText(W/2, H*0.755, 3.2*s, "CLICK OR PRESS ENTER TO LAUNCH", cAmber, 1)
-		}
-		lines := []string{
-			"MOUSE - AIM      W A S D - THRUST",
-			"SPACE / LEFT CLICK - FIRE      SHIFT - BOOST",
-			"Q - FLIP LEFT      E - FLIP RIGHT      ALT / RIGHT CLICK - ROCKET      V - COCKPIT VIEW",
-			"A / D - CHANGE LEVEL      F2 - CHANGE NAME",
-			"ESC / P - PAUSE MENU      M - MUSIC      N - NEXT SONG      F - FULLSCREEN",
-		}
-		for i, l := range lines {
-			h.text(W/2, H*0.805+float32(i)*20*s, 1.8*s, l, fade(cCyan, 0.8), 1)
-		}
-		if g.HiScore > 0 {
-			h.text(W/2, H*0.16+144*s, 2*s, fmt.Sprintf("BEST %06d", g.HiScore), cWhite, 1)
-		}
-		// the only way out from here, besides the window's own close button
-		qx, qy, qw, qh := titleQuitRect(W, H)
-		if g.QuitHover {
-			h.rect(qx, qy, qw, qh, fade(cRed, 0.30))
-			h.rect(qx, qy+qh-3*s, qw, 3*s, cRed)
-			h.glowText(qx+qw/2, qy+qh/2-7*s, 2.2*s, "QUIT GAME", cWhite, 1)
+		if h.touch != nil {
+			h.drawTitleTouch(g, W, H, blinkOn)
 		} else {
-			h.rect(qx, qy, qw, qh, RGBA{0, 0, 0, 0.45})
-			h.rect(qx, qy+qh-2*s, qw, 2*s, fade(cCyan, 0.5))
-			h.text(qx+qw/2, qy+qh/2-7*s, 2.2*s, "QUIT GAME", fade(cCyan, 0.8), 1)
-		}
-		if g.Track != "" {
-			h.text(28*s, H-34*s, 1.8*s, "NOW PLAYING  "+g.Track, fade(cAmber, 0.8), 0)
+			h.drawTitle(g, W, H, blinkOn)
 		}
 	case stateName:
-		h.glowText(W/2, H*0.16, 11*s, "SPACE CONTROL", cCyan, 1)
-		h.rect(0, H*0.40, W, H*0.30, RGBA{0, 0, 0, 0.5})
-		h.text(W/2, H*0.44, 3*s, "WHAT IS YOUR NAME, PILOT?", cWhite, 1)
-		typed := g.NameBuf
-		if blinkOn && len(typed) < maxNameLen {
-			typed += "_"
-		}
-		h.glowText(W/2-textW(g.NameBuf, 6*s)/2, H*0.52, 6*s, typed, cAmber, 0)
-		h.text(W/2, H*0.63, 2*s, "TYPE YOUR NAME      ENTER - CONFIRM", fade(cCyan, 0.8), 1)
+		h.drawName(g, W, H, blinkOn)
 	default:
 		h.drawPlay(g, W, H, blinkOn)
 	}
-
 	if g.State == statePaused {
-		h.glowText(W/2, H*0.20, 8*s, "PAUSED", cWhite, 1)
-		music := "MUSIC  OFF"
-		if g.Music {
-			music = "MUSIC  ON"
-		}
-		labels := [pauseCount]string{"RESUME", "RESTART", fmt.Sprintf("VOLUME  %d/10", g.Volume), fmt.Sprintf("ENGINES  %d/10", g.EngineVol), music, "QUIT TO TITLE", "QUIT GAME"}
-		for i, l := range labels {
-			x, y, w, hh := pauseItemRect(i, W, H)
-			if i == g.MenuSel {
-				h.rect(x, y, w, hh, fade(cCyan, 0.18))
-				h.rect(x, y, 4*s, hh, cCyan)
-				h.rect(x+w-4*s, y, 4*s, hh, cCyan)
-				h.glowText(W/2, y+hh/2-10.5*s, 3*s, l, cWhite, 1)
-			} else {
-				h.text(W/2, y+hh/2-10.5*s, 3*s, l, fade(cCyan, 0.75), 1)
-			}
-			if i == pauseVolume || i == pauseEngine {
-				// level pips under the label
-				level := g.Volume
-				if i == pauseEngine {
-					level = g.EngineVol
-				}
-				pw := 14 * s
-				for k := 0; k < 10; k++ {
-					c := fade(cCyan, 0.2)
-					if k < level {
-						c = cAmber
-					}
-					h.rect(W/2-5*pw+float32(k)*pw+1*s, y+hh-5*s, pw-2*s, 3*s, c)
-				}
-			}
-		}
-		h.text(W/2, H*0.80, 1.8*s, "W / S OR MOUSE - CHOOSE      ENTER OR CLICK - SELECT      A / D - ADJUST      ESC - RESUME", fade(cCyan, 0.7), 1)
+		h.drawPause(g, W, H)
 	}
 	if g.State == stateGameOver {
-		h.rect(0, H*0.30, W, H*0.36, RGBA{0, 0, 0, 0.45})
-		h.glowText(W/2, H*0.34, 8*s, "SHIP DESTROYED", cRed, 1)
-		h.text(W/2, H*0.34+78*s, 3.4*s, fmt.Sprintf("SCORE %06d", g.Score), cWhite, 1)
-		h.text(W/2, H*0.34+112*s, 2.4*s, fmt.Sprintf("WAVE %d      KILLS %d", g.Wave, g.Kills), cCyan, 1)
-		if g.NewHi {
-			h.glowText(W/2, H*0.34+142*s, 2.8*s, "NEW BEST!", cAmber, 1)
-		} else {
-			h.text(W/2, H*0.34+142*s, 2.2*s, fmt.Sprintf("BEST %06d", g.HiScore), fade(cWhite, 0.7), 1)
-		}
-		if blinkOn {
-			h.text(W/2, H*0.34+182*s, 2.6*s, "R - FLY AGAIN      ESC - TITLE", cAmber, 1)
-		}
+		h.drawGameOver(g, W, H, blinkOn)
 	}
 
 	gl.Enable(gl.BLEND)
@@ -301,30 +205,300 @@ func (h *HUD) Draw(g *Game) {
 	gl.Disable(gl.BLEND)
 }
 
-// titleQuitRect is the QUIT GAME button in the title screen's top-right corner.
-func titleQuitRect(W, H float32) (x, y, w, h float32) {
-	s := H / 720
-	w, h = 160*s, 38*s
-	return W - w - 24*s, 24 * s, w, h
+// scale is the HUD's unit: the HUD is laid out for a 720-pixel-tall screen,
+// and drawn larger with the phone controls.
+func (h *HUD) scale(H float32) float32 {
+	if h.touch != nil {
+		return H / 720 * touchUI
+	}
+	return H / 720
 }
 
-func inRect(px, py, x, y, w, h float32) bool { return px >= x && px <= x+w && py >= y && py <= y+h }
+// rect is a box on screen, in HUD pixels.
+type rect struct{ x, y, w, h float32 }
 
-// pauseItemRect is the on-screen box of pause-menu entry i.
-func pauseItemRect(i int, W, H float32) (x, y, w, h float32) {
-	s := H / 720
-	w, h = 380*s, 40*s
-	return W/2 - w/2, H*0.31 + float32(i)*46*s, w, h
+func (r rect) has(px, py float32) bool {
+	return px >= r.x && px <= r.x+r.w && py >= r.y && py <= r.y+r.h
+}
+
+// button draws a box with a centred label, lit when on.
+func (h *HUD) button(r rect, label string, px float32, c RGBA, on bool) {
+	s := h.s
+	if on {
+		h.rect(r.x, r.y, r.w, r.h, fade(c, 0.30))
+		h.rect(r.x, r.y+r.h-3*s, r.w, 3*s, c)
+		h.glowText(r.x+r.w/2, r.y+r.h/2-3.5*px, px, label, cWhite, 1)
+		return
+	}
+	h.rect(r.x, r.y, r.w, r.h, RGBA{0, 0, 0, 0.45})
+	h.rect(r.x, r.y+r.h-2*s, r.w, 2*s, fade(c, 0.6))
+	h.text(r.x+r.w/2, r.y+r.h/2-3.5*px, px, label, fade(c, 0.9), 1)
+}
+
+func (h *HUD) drawTitle(g *Game, W, H float32, blinkOn bool) {
+	s := h.s
+	h.glowText(W/2, H*0.16, 11*s, "SPACE CONTROL", cCyan, 1)
+	h.text(W/2, H*0.16+92*s, 2.5*s, "HOLD THE LINE. WATCH YOUR HEAT.", cWhite, 1)
+	if g.Name != "" {
+		h.text(W/2, H*0.16+120*s, 2.2*s, "PILOT  "+g.Name, cAmber, 1)
+	}
+	// difficulty level picker
+	ly := H * 0.645
+	h.rect(W/2-280*s, ly-8*s, 560*s, 66*s, RGBA{0, 0, 0, 0.45})
+	h.text(W/2, ly, 1.8*s, "LEVEL", fade(cCyan, 0.8), 1)
+	for i, d := range diffs {
+		x := W/2 + float32(i-1)*170*s
+		if i == g.Diff {
+			h.rect(x-70*s, ly+18*s, 140*s, 32*s, fade(cCyan, 0.18))
+			h.rect(x-70*s, ly+48*s, 140*s, 2*s, cCyan)
+			h.glowText(x, ly+24*s, 3*s, d.name, cWhite, 1)
+		} else {
+			h.text(x, ly+24*s, 3*s, d.name, fade(cCyan, 0.6), 1)
+		}
+	}
+	if blinkOn {
+		h.glowText(W/2, H*0.755, 3.2*s, "CLICK OR PRESS ENTER TO LAUNCH", cAmber, 1)
+	}
+	lines := []string{
+		"MOUSE - AIM      W A S D - THRUST",
+		"SPACE / LEFT CLICK - FIRE      SHIFT - BOOST",
+		"Q - FLIP LEFT      E - FLIP RIGHT      ALT / RIGHT CLICK - ROCKET      V - COCKPIT VIEW",
+		"A / D - CHANGE LEVEL      F2 - CHANGE NAME",
+		"ESC / P - PAUSE MENU      M - MUSIC      N - NEXT SONG      F - FULLSCREEN",
+	}
+	for i, l := range lines {
+		h.text(W/2, H*0.805+float32(i)*20*s, 1.8*s, l, fade(cCyan, 0.8), 1)
+	}
+	if g.HiScore > 0 {
+		h.text(W/2, H*0.16+144*s, 2*s, fmt.Sprintf("BEST %06d", g.HiScore), cWhite, 1)
+	}
+	// the only way out from here, besides the window's own close button
+	h.button(titleQuitRect(W, H, s), "QUIT GAME", 2.2*s, cRed, g.QuitHover)
+	if g.Track != "" {
+		h.text(28*s, H-34*s, 1.8*s, "NOW PLAYING  "+g.Track, fade(cAmber, 0.8), 0)
+	}
+}
+
+// titleQuitRect is the QUIT GAME button in the title screen's top-right corner.
+func titleQuitRect(W, H, s float32) rect {
+	w, hh := 160*s, 38*s
+	return rect{W - w - 24*s, 24 * s, w, hh}
+}
+
+// titleTouch is what can be tapped on the phone title screen.
+type titleTouch struct {
+	quit, launch, name rect
+	levels             [diffCount]rect
+}
+
+func titleLayout(W, H, s float32, touch bool) titleTouch {
+	l := titleTouch{quit: titleQuitRect(W, H, s)}
+	l.name = rect{W/2 - 260*s, H*0.09 + 96*s, 520 * s, 30 * s}
+	ly := H*0.47 + 20*s
+	for i := range l.levels {
+		x := W/2 + float32(i-1)*190*s
+		l.levels[i] = rect{x - 85*s, ly, 170 * s, 46 * s}
+	}
+	l.launch = rect{W/2 - 180*s, H * 0.70, 360 * s, 64 * s}
+	return l
+}
+
+func (h *HUD) drawTitleTouch(g *Game, W, H float32, blinkOn bool) {
+	s := h.s
+	l := titleLayout(W, H, s, true)
+	h.glowText(W/2, H*0.09, 9*s, "SPACE CONTROL", cCyan, 1)
+	h.text(W/2, H*0.09+72*s, 2.2*s, "HOLD THE LINE. WATCH YOUR HEAT.", cWhite, 1)
+	name := "TAP TO SET YOUR PILOT NAME"
+	if g.Name != "" {
+		name = "PILOT  " + g.Name + "    TAP TO CHANGE"
+	}
+	h.text(W/2, l.name.y+l.name.h/2-8*s, 2.4*s, name, cAmber, 1)
+	if g.HiScore > 0 {
+		h.text(W/2, l.name.y+l.name.h+8*s, 2*s, fmt.Sprintf("BEST %06d", g.HiScore), cWhite, 1)
+	}
+	h.text(W/2, l.levels[0].y-20*s, 2*s, "LEVEL", fade(cCyan, 0.8), 1)
+	for i, d := range diffs {
+		h.button(l.levels[i], d.name, 3*s, cCyan, i == g.Diff)
+	}
+	h.button(l.launch, "LAUNCH", 4.2*s, cAmber, blinkOn)
+	h.text(W/2, l.launch.y+l.launch.h+16*s, 1.8*s, "LEFT STICK - FLY      DRAG OR TILT - TURN", fade(cCyan, 0.8), 1)
+	h.button(l.quit, "QUIT GAME", 2.2*s, cRed, false)
+	if g.Track != "" {
+		h.text(28*s, H-34*s, 1.8*s, "NOW PLAYING  "+g.Track, fade(cAmber, 0.8), 0)
+	}
+}
+
+// nameOKRect is the OK button on the phone's name screen, beside the name:
+// in landscape the on-screen keyboard covers all but the top third.
+func nameOKRect(W, H, s float32) rect { return rect{W/2 + 230*s, H*0.13 - 4*s, 160 * s, 56 * s} }
+
+func (h *HUD) drawName(g *Game, W, H float32, blinkOn bool) {
+	s := h.s
+	typed := g.NameBuf
+	if blinkOn && len(typed) < maxNameLen {
+		typed += "_"
+	}
+	if h.touch != nil {
+		h.rect(0, 0, W, H*0.30, RGBA{0, 0, 0, 0.55})
+		h.text(W/2, H*0.04, 3*s, "WHAT IS YOUR NAME, PILOT?", cWhite, 1)
+		h.glowText(W/2-textW(g.NameBuf, 6*s)/2, H*0.13, 6*s, typed, cAmber, 0)
+		h.button(nameOKRect(W, H, s), "OK", 3.4*s, cCyan, cleanName(g.NameBuf) != "")
+		return
+	}
+	h.glowText(W/2, H*0.16, 11*s, "SPACE CONTROL", cCyan, 1)
+	h.rect(0, H*0.40, W, H*0.30, RGBA{0, 0, 0, 0.5})
+	h.text(W/2, H*0.44, 3*s, "WHAT IS YOUR NAME, PILOT?", cWhite, 1)
+	h.glowText(W/2-textW(g.NameBuf, 6*s)/2, H*0.52, 6*s, typed, cAmber, 0)
+	h.text(W/2, H*0.63, 2*s, "TYPE YOUR NAME      ENTER - CONFIRM", fade(cCyan, 0.8), 1)
+}
+
+func pauseLabel(g *Game, item int) string {
+	onOff := func(b bool) string {
+		if b {
+			return "ON"
+		}
+		return "OFF"
+	}
+	switch item {
+	case pauseResume:
+		return "RESUME"
+	case pauseRestart:
+		return "RESTART"
+	case pauseVolume:
+		return fmt.Sprintf("VOLUME  %d/10", g.Volume)
+	case pauseEngine:
+		return fmt.Sprintf("ENGINES  %d/10", g.EngineVol)
+	case pauseMusic:
+		return "MUSIC  " + onOff(g.Music)
+	case pauseNextSong:
+		return "NEXT SONG"
+	case pauseMotion:
+		return "MOTION AIM  " + motionNames[g.Motion]
+	case pauseTurn:
+		return fmt.Sprintf("TURN SPEED  %d/10", g.TurnSpeed)
+	case pauseRecenter:
+		return "RECENTER TILT"
+	case pauseAssist:
+		return "AIM ASSIST  " + onOff(g.Assist)
+	case pauseAutoFire:
+		return "AUTO FIRE  " + onOff(g.AutoFire)
+	case pauseVibrate:
+		return "VIBRATION  " + onOff(g.Vibrate)
+	case pauseTitle:
+		return "QUIT TO TITLE"
+	default:
+		return "QUIT GAME"
+	}
+}
+
+func (h *HUD) drawPause(g *Game, W, H float32) {
+	s := h.s
+	touch := h.touch != nil
+	if touch {
+		h.glowText(W/2, H*0.07, 6*s, "PAUSED", cWhite, 1)
+	} else {
+		h.glowText(W/2, H*0.20, 8*s, "PAUSED", cWhite, 1)
+	}
+	px := 3 * s
+	if touch {
+		px = 2.4 * s
+	}
+	for i, item := range g.Menu {
+		r := pauseItemRect(i, W, H, s, len(g.Menu), touch)
+		l := pauseLabel(g, item)
+		ty := r.y + r.h/2 - 3.5*px
+		if adjustable(item) {
+			ty -= 3 * s // room for the level pips
+		}
+		if i == g.MenuSel && !touch {
+			h.rect(r.x, r.y, r.w, r.h, fade(cCyan, 0.18))
+			h.rect(r.x, r.y, 4*s, r.h, cCyan)
+			h.rect(r.x+r.w-4*s, r.y, 4*s, r.h, cCyan)
+			h.glowText(r.x+r.w/2, ty, px, l, cWhite, 1)
+		} else {
+			if touch {
+				h.rect(r.x, r.y, r.w, r.h, RGBA{0, 0, 0, 0.45})
+				h.rect(r.x, r.y+r.h-2*s, r.w, 2*s, fade(cCyan, 0.5))
+			}
+			h.text(r.x+r.w/2, ty, px, l, fade(cCyan, 0.85), 1)
+		}
+		if adjustable(item) {
+			level, hi := g.Volume, 10
+			switch item {
+			case pauseEngine:
+				level = g.EngineVol
+			case pauseTurn:
+				level = g.TurnSpeed
+			}
+			pw := 14 * s
+			for k := 0; k < hi; k++ {
+				c := fade(cCyan, 0.2)
+				if k < level {
+					c = cAmber
+				}
+				h.rect(r.x+r.w/2-5*pw+float32(k)*pw+1*s, r.y+r.h-9*s, pw-2*s, 3*s, c)
+			}
+			if touch { // tap the ends to step down and up
+				h.text(r.x+16*s, r.y+r.h/2-3.5*3.2*s, 3.2*s, "-", cAmber, 0)
+				h.text(r.x+r.w-16*s, r.y+r.h/2-3.5*3.2*s, 3.2*s, "+", cAmber, 2)
+			}
+		}
+	}
+	if !touch {
+		h.text(W/2, H*0.80, 1.8*s, "W / S OR MOUSE - CHOOSE      ENTER OR CLICK - SELECT      A / D - ADJUST      ESC - RESUME", fade(cCyan, 0.7), 1)
+	}
+}
+
+// pauseItemRect is the on-screen box of pause-menu entry i of n. With the
+// phone controls the entries are larger and split into two columns.
+func pauseItemRect(i int, W, H, s float32, n int, touch bool) rect {
+	if !touch {
+		w, hh := 380*s, 40*s
+		return rect{W/2 - w/2, H*0.31 + float32(i)*46*s, w, hh}
+	}
+	rows := (n + 1) / 2
+	col, row := i/rows, i%rows
+	w, hh := 340*s, 46*s
+	return rect{W/2 - 355*s + float32(col)*370*s, H*0.21 + float32(row)*56*s, w, hh}
 }
 
 // pauseItemAt returns the pause-menu entry under a pixel, or -1.
-func pauseItemAt(px, py, W, H float32) int {
-	for i := 0; i < pauseCount; i++ {
-		if x, y, w, h := pauseItemRect(i, W, H); px >= x && px <= x+w && py >= y && py <= y+h {
+func pauseItemAt(px, py, W, H, s float32, n int, touch bool) int {
+	for i := 0; i < n; i++ {
+		if pauseItemRect(i, W, H, s, n, touch).has(px, py) {
 			return i
 		}
 	}
 	return -1
+}
+
+// gameOverButtons are FLY AGAIN and TITLE on the phone's game-over screen.
+func gameOverButtons(W, H, s float32) (again, title rect) {
+	w, hh := 250*s, 60*s
+	y := H*0.30 + H*0.36 + 18*s
+	return rect{W/2 - w - 20*s, y, w, hh}, rect{W/2 + 20*s, y, w, hh}
+}
+
+func (h *HUD) drawGameOver(g *Game, W, H float32, blinkOn bool) {
+	s := h.s
+	h.rect(0, H*0.30, W, H*0.36, RGBA{0, 0, 0, 0.45})
+	h.glowText(W/2, H*0.34, 8*s, "SHIP DESTROYED", cRed, 1)
+	h.text(W/2, H*0.34+78*s, 3.4*s, fmt.Sprintf("SCORE %06d", g.Score), cWhite, 1)
+	h.text(W/2, H*0.34+112*s, 2.4*s, fmt.Sprintf("WAVE %d      KILLS %d", g.Wave, g.Kills), cCyan, 1)
+	if g.NewHi {
+		h.glowText(W/2, H*0.34+142*s, 2.8*s, "NEW BEST!", cAmber, 1)
+	} else {
+		h.text(W/2, H*0.34+142*s, 2.2*s, fmt.Sprintf("BEST %06d", g.HiScore), fade(cWhite, 0.7), 1)
+	}
+	if h.touch != nil {
+		again, title := gameOverButtons(W, H, s)
+		h.button(again, "FLY AGAIN", 3*s, cAmber, true)
+		h.button(title, "TITLE", 3*s, cCyan, false)
+		return
+	}
+	if blinkOn {
+		h.text(W/2, H*0.34+182*s, 2.6*s, "R - FLY AGAIN      ESC - TITLE", cAmber, 1)
+	}
 }
 
 func (h *HUD) drawPlay(g *Game, W, H float32, blinkOn bool) {
@@ -363,10 +537,14 @@ func (h *HUD) drawPlay(g *Game, W, H float32, blinkOn bool) {
 	}
 
 	// wave
-	h.text(W-m, m, 2*s, "WAVE", fade(cCyan, 0.8), 2)
-	h.glowText(W-m, m+18*s, 4.2*s, fmt.Sprintf("%02d", g.Wave), cWhite, 2)
-	h.text(W-m, m+56*s, 1.8*s, fmt.Sprintf("HOSTILES %d", len(g.Enemies)+len(g.queue)), fade(cCyan, 0.6), 2)
-	h.text(W-m, m+74*s, 1.8*s, diffs[g.Diff].name, fade(cAmber, 0.8), 2)
+	wx := W - m // right edge of the wave block; with touch, PAUSE and VIEW sit in the corner
+	if h.touch != nil {
+		wx -= 152 * s
+	}
+	h.text(wx, m, 2*s, "WAVE", fade(cCyan, 0.8), 2)
+	h.glowText(wx, m+18*s, 4.2*s, fmt.Sprintf("%02d", g.Wave), cWhite, 2)
+	h.text(wx, m+56*s, 1.8*s, fmt.Sprintf("HOSTILES %d", len(g.Enemies)+len(g.queue)), fade(cCyan, 0.6), 2)
+	h.text(wx, m+74*s, 1.8*s, diffs[g.Diff].name, fade(cAmber, 0.8), 2)
 
 	// boss bar
 	for _, e := range g.Enemies {
@@ -471,74 +649,95 @@ func (h *HUD) drawPlay(g *Game, W, H float32, blinkOn bool) {
 		}
 	}
 
-	// bottom centre: heat + boost
-	bw := 320 * s
-	bx, by := W/2-bw/2, H-m-56*s
-	heatCol := cCyan
-	if p.Heat > 0.5 {
-		heatCol = cAmber
-	}
-	if p.Heat > 0.78 || p.Overheated {
-		heatCol = cRed
-	}
-	label := "WEAPON HEAT"
-	if p.Overheated {
-		label = "OVERHEATED - COOLING"
-	}
-	if !p.Overheated || blinkOn {
-		h.text(W/2, by-16*s, 1.8*s, label, heatCol, 1)
-	}
-	h.bar(bx, by, bw, 10*s, p.Heat, heatCol, 24)
-	boost := float32(1)
-	if p.BoostCD > 0 {
-		boost = 1 - p.BoostCD/boostCD
-	}
-	bc := cAmber
-	if boost < 1 {
-		bc = fade(cAmber, 0.6)
-	}
-	h.rect(bx, by+16*s, bw, 4*s, fade(cAmber, 0.15))
-	h.rect(bx, by+16*s, bw*boost, 4*s, bc)
-	h.text(W/2, by+24*s, 1.5*s, "BOOST", fade(cAmber, 0.8), 1)
-	flip := float32(1)
-	if p.FlipCD > 0 {
-		flip = 1 - p.FlipCD/flipCD
-	}
-	fc := cGreen
-	if flip < 1 {
-		fc = fade(cGreen, 0.6)
-	}
-	h.rect(bx, by+40*s, bw, 4*s, fade(cGreen, 0.15))
-	h.rect(bx, by+40*s, bw*flip, 4*s, fc)
-	h.text(W/2, by+48*s, 1.5*s, "FLIP", fade(cGreen, 0.8), 1)
+	// bottom centre: heat + boost (with touch, only in play: the menus need the room)
+	if h.touch == nil || g.State == stateRunning {
+		bw := 320 * s
+		cx := W / 2
+		bars := true
+		if h.touch != nil {
+			// between the joystick and the buttons; on a narrow screen there is
+			// no room, and FIRE, BOOST and FLIP show the same on their rings
+			hx, _ := stickHome(W, H, s)
+			tx, _, tr := touchButton(tbTrack, W, H, s)
+			lo, hi := hx+stickRadius*s+12*s, tx-tr-12*s
+			bw, cx = min(bw, hi-lo), (lo+hi)/2
+			bars = bw >= 170*s
+		}
+		bx, by := cx-bw/2, H-m-56*s
+		heatCol := cCyan
+		if p.Heat > 0.5 {
+			heatCol = cAmber
+		}
+		if p.Heat > 0.78 || p.Overheated {
+			heatCol = cRed
+		}
+		label := "WEAPON HEAT"
+		if p.Overheated {
+			label = "OVERHEATED - COOLING"
+		}
+		if bars {
+			if !p.Overheated || blinkOn {
+				h.text(cx, by-16*s, 1.8*s, label, heatCol, 1)
+			}
+			h.bar(bx, by, bw, 10*s, p.Heat, heatCol, 24)
+			boost := float32(1)
+			if p.BoostCD > 0 {
+				boost = 1 - p.BoostCD/boostCD
+			}
+			bc := cAmber
+			if boost < 1 {
+				bc = fade(cAmber, 0.6)
+			}
+			h.rect(bx, by+16*s, bw, 4*s, fade(cAmber, 0.15))
+			h.rect(bx, by+16*s, bw*boost, 4*s, bc)
+			h.text(cx, by+24*s, 1.5*s, "BOOST", fade(cAmber, 0.8), 1)
+			flip := float32(1)
+			if p.FlipCD > 0 {
+				flip = 1 - p.FlipCD/flipCD
+			}
+			fc := cGreen
+			if flip < 1 {
+				fc = fade(cGreen, 0.6)
+			}
+			h.rect(bx, by+40*s, bw, 4*s, fade(cGreen, 0.15))
+			h.rect(bx, by+40*s, bw*flip, 4*s, fc)
+			h.text(cx, by+48*s, 1.5*s, "FLIP", fade(cGreen, 0.8), 1)
+		} else {
+			cx, by = W/2, H*0.62 // the power-ups go above the controls
+		}
 
-	// active power-ups
-	py := by - 40*s
-	if p.RapidT > 0 {
-		h.text(W/2, py, 2*s, fmt.Sprintf("RAPID FIRE %.1f", p.RapidT), cAmber, 1)
-		py -= 18 * s
-	}
-	if p.CoolT > 0 {
-		h.text(W/2, py, 2*s, fmt.Sprintf("COOLANT %.1f", p.CoolT), cCyan, 1)
+		// active power-ups
+		py := by - 40*s
+		if p.RapidT > 0 {
+			h.text(cx, py, 2*s, fmt.Sprintf("RAPID FIRE %.1f", p.RapidT), cAmber, 1)
+			py -= 18 * s
+		}
+		if p.CoolT > 0 {
+			h.text(cx, py, 2*s, fmt.Sprintf("COOLANT %.1f", p.CoolT), cCyan, 1)
+		}
+
 	}
 
-	// bottom left: rockets
+	// bottom left (top left with touch, clear of the joystick): rockets and shields
+	ly := H - m - 92*s
+	if h.touch != nil {
+		ly = m + 124*s
+	}
 	rc := RGBA{1.0, 0.45, 0.35, 1}
-	h.text(m, H-m-92*s, 1.8*s, "ROCKETS", fade(cCyan, 0.8), 0)
+	h.text(m, ly, 1.8*s, "ROCKETS", fade(cCyan, 0.8), 0)
 	for i := 0; i < maxRockets; i++ {
 		c := fade(rc, 0.18)
 		if i < p.Rockets {
 			c = rc
 		}
-		x, y := m+float32(i)*13*s, H-m-74*s
+		x, y := m+float32(i)*13*s, ly+18*s
 		h.rect(x, y+5*s, 8*s, 13*s, c)
 		h.tri(x, y+5*s, x+8*s, y+5*s, x+4*s, y, c)
 	}
 
-	// bottom left: shields
-	h.text(m, H-m-44*s, 1.8*s, "SHIELDS", fade(cCyan, 0.8), 0)
+	h.text(m, ly+48*s, 1.8*s, "SHIELDS", fade(cCyan, 0.8), 0)
 	for i := 0; i < maxShields; i++ {
-		x, y := m+float32(i)*30*s, H-m-26*s
+		x, y := m+float32(i)*30*s, ly+66*s
 		c := fade(cCyan, 0.15)
 		if i < p.Shields {
 			c = cCyan
@@ -556,9 +755,13 @@ func (h *HUD) drawPlay(g *Game, W, H float32, blinkOn bool) {
 		h.rect(x, y-5*s, w, 4*s, c)
 	}
 
-	// bottom right: radar
+	// bottom right (top right with touch, under PAUSE and VIEW): radar
 	rad := 78 * s
 	cx, cy := W-m-rad, H-m-rad
+	if h.touch != nil {
+		rad = 52 * s
+		cx, cy = W-m-rad, m+70*s+rad
+	}
 	h.disc(cx, cy, rad, RGBA{0.02, 0.08, 0.12, 0.55})
 	h.arc(cx, cy, rad, 1.5*s, 0, 2*math.Pi, fade(cCyan, 0.7))
 	h.arc(cx, cy, rad*0.5, 1*s, 0, 2*math.Pi, fade(cCyan, 0.25))
@@ -613,5 +816,151 @@ func (h *HUD) drawPlay(g *Game, W, H float32, blinkOn bool) {
 			nc = cRed
 		}
 		h.text(W/2, H*0.66, 2.4*s, g.Note, fade(nc, a), 1)
+	}
+	if h.touch != nil && g.State == stateRunning {
+		h.drawTouch(g, W, H)
+	}
+}
+
+// drawTouch draws the phone controls: the joystick and the buttons, and the
+// target TRACK is swinging onto.
+func (h *HUD) drawTouch(g *Game, W, H float32) {
+	t, s, p := h.touch, h.s, &g.P
+	R := stickRadius * s
+	a := float32(0.45)
+	if t.StickOn {
+		a = 0.9
+	}
+	h.disc(t.BaseX, t.BaseY, R, RGBA{0.02, 0.08, 0.12, 0.35 * a})
+	h.arc(t.BaseX, t.BaseY, R, 2*s, 0, 2*math.Pi, fade(cCyan, 0.7*a))
+	// ticks at the four directions, so the thumb's position reads at a glance
+	for k := 0; k < 4; k++ {
+		ang := float64(k) * math.Pi / 2
+		cx, cy := float32(math.Cos(ang)), float32(math.Sin(ang))
+		h.line(t.BaseX+cx*(R-12*s), t.BaseY+cy*(R-12*s), t.BaseX+cx*(R-4*s), t.BaseY+cy*(R-4*s), 2*s, fade(cCyan, 0.6*a))
+	}
+	// the boost zone, past the top of the ring: shown as the thumb heads there
+	if t.StickOn && t.StickY > 0.5 {
+		show := min((t.StickPush-0.8)/(stickBoost-0.8), 1)
+		if show > 0 {
+			bc := fade(cAmber, 0.35+0.4*show)
+			if t.Boosting {
+				bc = cAmber
+			}
+			// just above the knob at the top of its travel
+			by := t.BaseY - R - 44*s
+			for k := float32(0); k < 2; k++ {
+				y := by - k*11*s
+				h.line(t.BaseX-14*s, y+7*s, t.BaseX, y, 3*s, bc)
+				h.line(t.BaseX, y, t.BaseX+14*s, y+7*s, 3*s, bc)
+			}
+			h.text(t.BaseX+22*s, by-9*s, 1.6*s, "BOOST", bc, 0)
+		}
+	}
+	h.disc(t.KnobX, t.KnobY, 34*s, fade(cCyan, 0.20+0.30*a))
+	h.arc(t.KnobX, t.KnobY, 34*s, 2*s, 0, 2*math.Pi, fade(cWhite, a))
+	if !t.StickOn {
+		h.text(t.BaseX, t.BaseY+R+8*s, 1.4*s, "MOVE", fade(cCyan, 0.5), 1)
+	}
+
+	// the enemy TRACK is turning toward
+	if e := g.Tracked; e != nil {
+		if x, y, ok := h.r.project(e.Pos); ok && x > 0 && x < W && y > 0 && y < H {
+			k := (22 + kinds[e.Kind].radius*0.5) * s
+			spin := float64(g.Time * 3)
+			for q := 0; q < 4; q++ {
+				a0 := spin + float64(q)*math.Pi/2
+				h.arc(x, y, k, 2.5*s, a0, a0+0.8, cGreen)
+			}
+		}
+	}
+
+	pulse := float32(0.5 + 0.5*math.Sin(float64(g.Time*8)))
+	for i := 0; i < tbCount; i++ {
+		x, y, r := touchButton(i, W, H, s)
+		c, label, px := cCyan, "", 1.8*s
+		switch i {
+		case tbFire:
+			label, px = "FIRE", 2.8*s
+			if p.Heat > 0.5 {
+				c = cAmber
+			}
+			if p.Overheated || p.Heat > 0.78 {
+				c = cRed
+			}
+		case tbRocket:
+			label, px, c = fmt.Sprintf("ROCKET %d", p.Rockets), 1.5*s, RGBA{1.0, 0.45, 0.35, 1}
+			if p.Rockets == 0 {
+				c = fade(c, 0.45)
+			}
+		case tbBoost:
+			label, c = "BOOST", cAmber
+		case tbTrack:
+			label, px, c = "TRACK", 1.5*s, cGreen
+		case tbFlipL, tbFlipR:
+			label, px, c = "FLIP", 1.7*s, cGreen
+		case tbView:
+			label, px = "VIEW", 1.5*s
+		}
+		fill := float32(0.16)
+		if t.Held[i] {
+			fill = 0.45
+		}
+		h.disc(x, y, r, fade(c, fill))
+		h.arc(x, y, r, 2*s, 0, 2*math.Pi, fade(c, 0.85))
+		switch i {
+		case tbFire:
+			// heat fills the ring, so it can be watched without looking away
+			if p.Heat > 0.01 {
+				h.arc(x, y, r-6*s, 4*s, -math.Pi/2, -math.Pi/2+2*math.Pi*float64(min(p.Heat, 1)), fade(c, 0.9))
+			}
+			// small arrows: the thumb can slide on FIRE to aim
+			if !t.Held[i] {
+				for k := 0; k < 4; k++ {
+					ang := float64(k) * math.Pi / 2
+					cx, cy := float32(math.Cos(ang)), float32(math.Sin(ang))
+					ox, oy := x+cx*(r+9*s), y+cy*(r+9*s)
+					h.tri(ox+cx*6*s, oy+cy*6*s, ox-cy*5*s, oy+cx*5*s, ox+cy*5*s, oy-cx*5*s, fade(c, 0.45))
+				}
+			}
+			if g.AutoFire {
+				h.text(x, y+r*0.42, 1.3*s, "AUTO", fade(cWhite, 0.75), 1)
+			}
+		case tbRocket:
+			if g.Lock != nil && p.Rockets > 0 { // a rocket fired now would home
+				h.arc(x, y, r+5*s+3*s*pulse, 2.5*s, 0, 2*math.Pi, fade(c, 0.6+0.4*pulse))
+				h.text(x, y+r*0.38, 1.3*s, "LOCKED", c, 1)
+			} else if p.rocketCD > 0 {
+				h.arc(x, y, r-5*s, 3*s, -math.Pi/2, -math.Pi/2+2*math.Pi*float64(1-p.rocketCD/rocketCooldown), c)
+			}
+		case tbBoost: // cooldown ring
+			if p.BoostCD > 0 {
+				h.arc(x, y, r-5*s, 3*s, -math.Pi/2, -math.Pi/2+2*math.Pi*float64(1-p.BoostCD/boostCD), c)
+			}
+		case tbTrack: // a little crosshair over the label
+			if g.Tracked != nil {
+				h.arc(x, y, r+4*s, 2.5*s, 0, 2*math.Pi, fade(c, 0.6+0.4*pulse))
+			}
+			h.line(x-9*s, y-12*s, x+9*s, y-12*s, 2*s, fade(c, 0.9))
+			h.line(x, y-21*s, x, y-3*s, 2*s, fade(c, 0.9))
+			y += 8 * s
+		case tbFlipL, tbFlipR:
+			if p.FlipCD > 0 {
+				h.arc(x, y, r-5*s, 3*s, -math.Pi/2, -math.Pi/2+2*math.Pi*float64(1-p.FlipCD/flipCD), c)
+			}
+			dir := float32(-1)
+			if i == tbFlipR {
+				dir = 1
+			}
+			ax := x + dir*r*0.55
+			h.tri(ax+dir*7*s, y, ax-dir*3*s, y-7*s, ax-dir*3*s, y+7*s, fade(c, 0.9))
+			x -= dir * 4 * s
+		case tbPause:
+			h.rect(x-9*s, y-11*s, 6*s, 22*s, fade(c, 0.9))
+			h.rect(x+3*s, y-11*s, 6*s, 22*s, fade(c, 0.9))
+		}
+		if label != "" {
+			h.text(x, y-3.5*px, px, label, fade(cWhite, 0.9), 1)
+		}
 	}
 }

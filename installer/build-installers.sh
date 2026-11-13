@@ -4,22 +4,40 @@
 #
 #   dist/SpaceControl-windows-x86_64-setup.exe     Windows 10/11, 64-bit
 #   dist/SpaceControl-linux-x86_64-installer.run   64-bit desktop Linux from 2022 on
+#   dist/SpaceControl-android.apk                  Android 11 and newer phones
 #   dist/HOW-TO-INSTALL.txt
 #
-# Needs only Docker. The first run downloads and builds the toolchains, which
-# takes a few minutes; later runs reuse them.
+# The Windows and Linux setups are built in Docker; the first run downloads
+# and builds those toolchains, which takes a few minutes, and later runs reuse
+# them. The Android app is built with the Android SDK on this machine (see
+# installer/android/build-android.sh).
 #
-#   sh installer/build-installers.sh             # both
-#   sh installer/build-installers.sh windows     # or just one: linux | windows
+#   sh installer/build-installers.sh             # all three
+#   sh installer/build-installers.sh windows     # or some: linux | windows | android
 set -eu
 cd "$(dirname "$0")/.."
-targets="${*:-linux windows}"
+targets="${*:-linux windows android}"
+docker_targets=
 for t in $targets; do
     case "$t" in
-        linux | windows) ;;
-        *) echo "unknown target '$t' (use linux or windows)" >&2; exit 2 ;;
+        linux | windows) docker_targets="$docker_targets $t" ;;
+        android) ;;
+        *) echo "unknown target '$t' (use linux, windows or android)" >&2; exit 2 ;;
     esac
 done
+
+mkdir -p dist
+case " $targets " in
+    *" android "*)
+        echo "==> android: building"
+        sh installer/android/build-android.sh
+        ;;
+esac
+if [ -z "$docker_targets" ]; then
+    cp installer/HOW-TO-INSTALL.txt dist/
+    exit 0
+fi
+
 command -v docker >/dev/null || { echo "Docker is needed: https://docs.docker.com/get-docker/" >&2; exit 1; }
 if ! docker info >/dev/null 2>&1; then
     # Docker Desktop on Linux runs as a user service; start it and wait for it
@@ -38,10 +56,9 @@ if ! docker info >/dev/null 2>&1; then
     fi
 fi
 
-mkdir -p dist
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
-for t in $targets; do
+for t in $docker_targets; do
     img="space-control-build-$t"
     echo "==> $t: preparing the build environment"
     if ! docker build -t "$img" -f "installer/docker/$t.Dockerfile" installer/docker; then

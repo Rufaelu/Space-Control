@@ -1,7 +1,7 @@
 package main
 
 // Custom soundtrack. Any MP3, OGG or WAV file in the game's "music" folder
-// replaces the built-in synth music; with the folder empty the synth plays.
+// (or a folder inside it) replaces the built-in synth music; with the folder empty the synth plays.
 // Tracks are decoded and resampled on a background goroutine and streamed to
 // the mixer in small chunks, so a long track costs little memory. The folder
 // is rescanned at every track change, and every couple of seconds while it
@@ -35,29 +35,9 @@ const (
 
 var musicExts = map[string]bool{".mp3": true, ".ogg": true, ".wav": true}
 
-// musicDir is the "music" folder next to the game's executable, or ./music
-// when running from the source tree.
-func musicDir() string {
-	var dirs []string
-	if exe, err := os.Executable(); err == nil {
-		if real, err := filepath.EvalSymlinks(exe); err == nil {
-			exe = real
-		}
-		dirs = append(dirs, filepath.Join(filepath.Dir(exe), "music"))
-	}
-	if wd, err := os.Getwd(); err == nil {
-		dirs = append(dirs, filepath.Join(wd, "music"))
-	}
-	for _, d := range dirs {
-		if st, err := os.Stat(d); err == nil && st.IsDir() {
-			return d
-		}
-	}
-	if len(dirs) > 0 {
-		return dirs[0] // not there yet; picked up if it is created later
-	}
-	return "music"
-}
+// musicDir is where the player's songs are: the "music" folder next to the
+// game on desktops, the phone's Music folder on Android (see platform_*.go).
+func musicDir() string { return defaultMusicDir() }
 
 type musicChunk struct {
 	gen   int32
@@ -137,28 +117,43 @@ func (m *MusicPlayer) next() (l, r float32, ok bool) {
 	return l, r, true
 }
 
-// scan lists the playable files in the folder, skipping ones that failed to decode.
+// scan lists the playable files in the folder and the folders inside it
+// (a phone's Music folder is usually sorted into artist and album folders),
+// skipping files that failed to decode.
 func (m *MusicPlayer) scan() []string {
-	ents, err := os.ReadDir(m.dir)
-	if err != nil {
-		return nil
-	}
 	var files []string
-	for _, e := range ents {
-		name := e.Name()
-		if strings.HasPrefix(name, ".") || !musicExts[strings.ToLower(filepath.Ext(name))] {
-			continue
+	var walk func(dir string, depth int)
+	walk = func(dir string, depth int) {
+		ents, err := os.ReadDir(dir)
+		if err != nil {
+			return
 		}
-		p := filepath.Join(m.dir, name)
-		st, err := os.Stat(p) // follows links
-		if err != nil || !st.Mode().IsRegular() {
-			continue
+		for _, e := range ents {
+			name := e.Name()
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			p := filepath.Join(dir, name)
+			st, err := os.Stat(p) // follows links
+			if err != nil {
+				continue
+			}
+			if st.IsDir() {
+				if depth < 3 {
+					walk(p, depth+1)
+				}
+				continue
+			}
+			if !st.Mode().IsRegular() || !musicExts[strings.ToLower(filepath.Ext(name))] {
+				continue
+			}
+			if m.bad[p] == stamp(st) {
+				continue
+			}
+			files = append(files, p)
 		}
-		if m.bad[p] == stamp(st) {
-			continue
-		}
-		files = append(files, p)
 	}
+	walk(m.dir, 0)
 	sort.Strings(files)
 	return files
 }

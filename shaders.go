@@ -1,8 +1,11 @@
 package main
 
-// All GLSL lives here. Everything targets OpenGL 3.3 core.
+import "game/internal/gl"
 
-const glslHead = "#version 330 core\n"
+// All GLSL lives here. It is written for OpenGL 3.3 core and also compiles as
+// OpenGL ES 3.0 (Android): only the header differs.
+
+const glslHead = gl.GLSLHead
 
 const glslNoise = `
 float hash(vec3 p){ p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }

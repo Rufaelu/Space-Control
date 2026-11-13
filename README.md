@@ -31,6 +31,7 @@ Navigate a vast starfield, manage your weapon heat, and defend your ship against
 - 🏆 **Combo multiplier and saved high score**
 - 🔊 **Synthesized stereo sound** — every ship class has its own engine note, placed left/right and pitched by how fast it is closing; plus lasers, explosions and alerts
 - 🎵 **Original soundtrack** — a driving synth loop generated in code that picks up in combat and boss fights
+- 📱 **Android version** — for phones with Android 11 or newer, held sideways: a joystick to fly, drag or tilt to turn, a button for everything else
 - 🎧 **Your own music** — drop MP3, OGG or WAV songs in the `music` folder and the game plays them instead
 - ⏸ **Pause menu** — resume, restart, volume, quit to title, quit game
 - 📡 **On-screen HUD** — radar, heat gauge, target brackets, off-screen threat arrows
@@ -73,6 +74,7 @@ folder empty, the built-in soundtrack comes back.
 |--------------|--------------|
 | Windows | `%LOCALAPPDATA%\Programs\SpaceControl\music` (Start menu → Space Control → Space Control Music Folder) |
 | Linux | `~/.local/share/space-control/music` (applications menu → right-click Space Control → Open Music Folder) |
+| Android | the phone's own `Music` folder (and the folders inside it) |
 | Running from source | `music/` in the project folder |
 
 Uninstalling keeps the songs you added.
@@ -117,7 +119,39 @@ go run .
 
 ## 💿 Installers
 
-Both installers ask for your name, which the game uses to congratulate you.
+The game asks for your name the first time it starts, and congratulates you by it.
+
+### 📱 Android
+
+```bash
+./build-setup.sh android        # or: sh installer/android/build-android.sh
+```
+
+Builds `dist/SpaceControl-android.apk` for Android 11 and newer (64- and 32-bit ARM phones,
+and the x86_64 emulator) with the Android SDK that Android Studio installs: an NDK,
+build-tools, platform android-35, plus a JDK, Go and cmake. It does not use Gradle. The first
+build downloads SDL2's source (about 8 MB). Copy the APK to the phone and tap it to install.
+
+On the phone:
+
+| Control | Action |
+|---------|--------|
+| **Joystick** (left thumb) | Appears under the thumb. Up forward, down back, left and right slide; push it hard forward, past the ring, to boost |
+| **Drag** anywhere else | Turn the ship (quick flicks turn further than slow drags) |
+| **FIRE** | Hold to shoot; slide the thumb on it to aim at the same time. The ring shows weapon heat |
+| **TRACK** | Hold to swing the ship onto the nearest enemy, even one behind you |
+| **ROCKET** | Fire a homing rocket; the button shows LOCKED when one would home |
+| **BOOST / FLIP / VIEW / ⏸** | One button each; rings show when BOOST and FLIP are ready again |
+| **Moving the phone** | Pause menu, MOTION AIM: **TILT** (like a steering wheel; RECENTER sets level), **GYRO** (turn the phone and the ship turns with it) or **OFF** |
+| **Back** | Pause / resume |
+
+The pause menu also has **AIM ASSIST** (on by default: the turn slows over a target and the nose
+is nudged onto enemies near the crosshair while you play), **AUTO FIRE** (shoots when the
+crosshair is on an enemy, and holds off before the guns overheat), **VIBRATION** and **TURN SPEED**.
+
+The phone version shares all of the game's code; `platform_android.go` holds what differs, and
+`internal/gl` switches between desktop OpenGL and OpenGL ES. To see the phone layout on a
+desktop, run with `SC_TOUCH=1`.
 
 ### 📀 Installers for another PC (recommended)
 

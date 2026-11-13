@@ -10,8 +10,9 @@ WINDOWS (10 or 11, 64-bit)
   1. Double-click  SpaceControl-windows-x86_64-setup.exe
      If Windows shows "Windows protected your PC", click "More info", then
      "Run anyway" (the installer is not code-signed).
-  2. Type your pilot name, click Next, then Install.
-  3. Start the game from the desktop icon or the Start menu.
+  2. Click Next, then Install.
+  3. Start the game from the desktop icon or the Start menu. The first time,
+     it asks for your pilot name.
 
   Uninstall: Settings > Apps > Space Control, or Start menu > Space Control
   > Uninstall Space Control.
@@ -20,11 +21,28 @@ LINUX (64-bit; Ubuntu 22.04+, Debian 12+, Fedora 36+, Mint 21+, Arch...)
 --------------------------------------------------------------------------
   1. Open a terminal in this folder and run:
          sh SpaceControl-linux-x86_64-installer.run
-  2. Type your pilot name.
-  3. Start the game from your applications menu (Space Control), or run
+  2. Start the game from your applications menu (Space Control), or run
          ~/.local/share/space-control/SpaceControl
+     The first time, it asks for your pilot name.
 
   Uninstall:  ~/.local/share/space-control/uninstall.sh
+
+ANDROID (phone with Android 11 or newer)
+----------------------------------------
+  1. Copy  SpaceControl-android.apk  to the phone (USB cable, Google Drive,
+     a chat to yourself...) and tap it in the phone's Files app.
+  2. If the phone asks, allow your Files app to "install unknown apps", then
+     tap Install. If Play Protect warns about an unknown app, choose
+     "Install anyway" (the app is not from the Play Store).
+  3. Open Space Control, allow it to read your music, and type your name.
+
+  Hold the phone sideways. Left thumb: the joystick flies (up forward, down
+  back, left and right slide; push it hard forward to boost). Drag anywhere
+  else to turn. Slide your thumb on FIRE to aim while shooting. Hold TRACK to
+  swing onto the nearest enemy. The pause menu has MOTION AIM (tilt or gyro
+  turning), AIM ASSIST, AUTO FIRE, VIBRATION, TURN SPEED and RECENTER TILT.
+
+  Uninstall: press and hold the app's icon, then Uninstall.
 
 YOUR OWN MUSIC
 --------------
@@ -37,10 +55,11 @@ music on or off.
             (it is %LOCALAPPDATA%\Programs\SpaceControl\music)
   Linux:    ~/.local/share/space-control/music
             (right-click Space Control in the applications menu > Open Music Folder)
+  Android:  the phone's own Music folder (folders inside it count too)
 
 Uninstalling keeps the songs you added.
 
 QUITTING
 --------
-Click QUIT GAME on the title screen, choose QUIT GAME in the pause menu (Esc),
-or close the window.
+Click QUIT GAME on the title screen, choose QUIT GAME in the pause menu (Esc,
+or Back on a phone), or close the window.

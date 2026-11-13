@@ -2,12 +2,11 @@
 ; Build the game into build\windows first, then:  makensis installer\windows\SpaceControl.nsi
 ; installer/build-installers.sh (Docker, on Linux), installer/build-windows.sh
 ; (MSYS2, on Windows) and the GitHub workflow do both steps.
-; Installs per user; no administrator rights needed.
+; Installs per user; no administrator rights needed. The game asks for the
+; pilot's name itself the first time it starts.
 
 Unicode true
 !include "MUI2.nsh"
-!include "nsDialogs.nsh"
-!include "LogicLib.nsh"
 
 !define APP "Space Control"
 !define EXE "SpaceControl.exe"
@@ -19,11 +18,7 @@ InstallDir "$LOCALAPPDATA\Programs\SpaceControl"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 
-Var PilotName
-Var NameField
-
 !insertmacro MUI_PAGE_WELCOME
-Page custom NamePageShow NamePageLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"
@@ -37,41 +32,11 @@ Page custom NamePageShow NamePageLeave
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
-; --- page: ask for the pilot's name (the game uses it to congratulate them) ---
-Function NamePageShow
-  !insertmacro MUI_HEADER_TEXT "Pilot name" "The game will call you by this name."
-  nsDialogs::Create 1018
-  Pop $0
-  ${NSD_CreateLabel} 0 0 100% 24u "What is your name, pilot?$\r$\n(Letters, digits, spaces and dashes; up to 12 characters.)"
-  Pop $0
-  ${If} $PilotName == ""
-    ReadEnvStr $PilotName USERNAME
-  ${EndIf}
-  ${NSD_CreateText} 0 30u 60% 13u "$PilotName"
-  Pop $NameField
-  ${NSD_SetTextLimit} $NameField 12
-  ${NSD_SetFocus} $NameField
-  nsDialogs::Show
-FunctionEnd
-
-Function NamePageLeave
-  ${NSD_GetText} $NameField $PilotName
-  ${If} $PilotName == ""
-    MessageBox MB_ICONEXCLAMATION "Please enter a name."
-    Abort
-  ${EndIf}
-FunctionEnd
 
 Section "Install"
   SetShellVarContext current
   SetOutPath "$INSTDIR"
   File /r "..\..\build\windows\*.*"
-
-  ; the game reads %AppData%\space-control\name and tidies the text itself
-  CreateDirectory "$APPDATA\space-control"
-  FileOpen $0 "$APPDATA\space-control\name" w
-  FileWrite $0 "$PilotName$\r$\n"
-  FileClose $0
 
   CreateDirectory "$SMPROGRAMS\${APP}"
   CreateShortcut "$SMPROGRAMS\${APP}\${APP}.lnk" "$INSTDIR\${EXE}"

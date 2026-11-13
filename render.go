@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/go-gl/gl/v4.1-core/gl"
+	"game/internal/gl"
 	mgl "github.com/go-gl/mathgl/mgl32"
 )
 
@@ -137,15 +137,19 @@ type Target struct {
 	w, h     int32
 }
 
-func newTarget(w, h int32, hdr bool) Target {
+// colorFormat is an internal texture format and the pixel type to upload it with.
+type colorFormat struct{ internal, typ uint32 }
+
+var (
+	fmtHDR = colorFormat{gl.RGBA16F, gl.FLOAT}
+	fmtLDR = colorFormat{gl.RGBA8, gl.UNSIGNED_BYTE}
+)
+
+func newTarget(w, h int32, f colorFormat) Target {
 	t := Target{w: w, h: h}
 	gl.GenTextures(1, &t.tex)
 	gl.BindTexture(gl.TEXTURE_2D, t.tex)
-	if hdr {
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.FLOAT, nil)
-	} else {
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, nil)
-	}
+	gl.TexImage2D(gl.TEXTURE_2D, 0, int32(f.internal), w, h, 0, gl.RGBA, f.typ, nil)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -167,7 +171,12 @@ func (t *Target) bind() {
 }
 
 type Renderer struct {
-	w, h int32
+	w, h       int32 // the 3D scene's resolution
+	outW, outH int32 // the window's; the HUD is drawn at this resolution
+	maxH       int32 // cap on the scene's height (phones), 0 = none
+
+	color   colorFormat // scene and bloom targets: HDR where the GPU can render it
+	samples int32       // multisampling of the scene
 
 	sky, star, mesh, part, bright, blur, comp, hud *Prog
 
@@ -209,8 +218,13 @@ func NewRenderer(w, h int32, toFinal bool) *Renderer {
 	r.hud = newProg(hudVS, hudFS)
 
 	gl.GenVertexArrays(1, &r.triVAO)
-	gl.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
-	gl.Enable(gl.PROGRAM_POINT_SIZE)
+	if !gl.IsES { // always on in OpenGL ES
+		gl.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
+		gl.Enable(gl.PROGRAM_POINT_SIZE)
+	} else {
+		r.maxH = 720 // phones: render the 3D at up to 720 lines and scale it up
+	}
+	r.pickFormat()
 
 	r.bakeSky()
 	r.buildStars()
@@ -229,12 +243,55 @@ func NewRenderer(w, h int32, toFinal bool) *Renderer {
 	return r
 }
 
+// pickFormat chooses HDR colour targets when the GPU can render (and
+// multisample) them. Some phone GPUs cannot; they get plain 8-bit colour,
+// which loses the bloom but still draws everything.
+func (r *Renderer) pickFormat() {
+	var maxSamples int32
+	gl.GetIntegerv(gl.MAX_SAMPLES, &maxSamples)
+	want := min(4, maxSamples)
+	for _, c := range []struct {
+		f colorFormat
+		n int32
+	}{{fmtHDR, want}, {fmtHDR, 0}, {fmtLDR, want}, {fmtLDR, 0}} {
+		if targetWorks(c.f, c.n) {
+			r.color, r.samples = c.f, c.n
+			return
+		}
+	}
+	r.color, r.samples = fmtLDR, 0
+}
+
+// targetWorks tries a small colour texture and a multisampled renderbuffer of a format.
+func targetWorks(f colorFormat, samples int32) bool {
+	t := newTarget(8, 8, f)
+	ok := gl.CheckFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
+	t.free()
+	if ok && samples > 0 {
+		var fbo, rb uint32
+		gl.GenFramebuffers(1, &fbo)
+		gl.BindFramebuffer(gl.FRAMEBUFFER, fbo)
+		gl.GenRenderbuffers(1, &rb)
+		gl.BindRenderbuffer(gl.RENDERBUFFER, rb)
+		gl.RenderbufferStorageMultisample(gl.RENDERBUFFER, samples, f.internal, 8, 8)
+		gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb)
+		ok = gl.CheckFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
+		gl.DeleteRenderbuffers(1, &rb)
+		gl.DeleteFramebuffers(1, &fbo)
+	}
+	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+	return ok
+}
+
 func (r *Renderer) bakeSky() {
-	const size = 1024
+	size := int32(1024)
+	if gl.IsES {
+		size = 512 // baking runs on the phone at start-up; keep it quick
+	}
 	gl.GenTextures(1, &r.skyTex)
 	gl.BindTexture(gl.TEXTURE_CUBE_MAP, r.skyTex)
 	for i := uint32(0); i < 6; i++ {
-		gl.TexImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X+i, 0, gl.RGBA16F, size, size, 0, gl.RGBA, gl.FLOAT, nil)
+		gl.TexImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X+i, 0, int32(r.color.internal), size, size, 0, gl.RGBA, r.color.typ, nil)
 	}
 	gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
@@ -297,10 +354,16 @@ func (r *Renderer) buildStars() {
 	r.starN = n
 }
 
-func (r *Renderer) resize(w, h int32) {
-	if w < 2 || h < 2 || (w == r.w && h == r.h) {
+// resize follows the window's drawable size; the scene may render smaller (maxH).
+func (r *Renderer) resize(outW, outH int32) {
+	if outW < 2 || outH < 2 || (outW == r.outW && outH == r.outH) {
 		return
 	}
+	w, h := outW, outH
+	if r.maxH > 0 && h > r.maxH {
+		w, h = int32(int64(w)*int64(r.maxH)/int64(h)), r.maxH
+	}
+	r.outW, r.outH = outW, outH
 	if r.w != 0 {
 		gl.DeleteFramebuffers(1, &r.msFBO)
 		gl.DeleteRenderbuffers(1, &r.msColor)
@@ -319,22 +382,22 @@ func (r *Renderer) resize(w, h int32) {
 	gl.BindFramebuffer(gl.FRAMEBUFFER, r.msFBO)
 	gl.GenRenderbuffers(1, &r.msColor)
 	gl.BindRenderbuffer(gl.RENDERBUFFER, r.msColor)
-	gl.RenderbufferStorageMultisample(gl.RENDERBUFFER, 4, gl.RGBA16F, w, h)
+	gl.RenderbufferStorageMultisample(gl.RENDERBUFFER, r.samples, r.color.internal, w, h)
 	gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, r.msColor)
 	gl.GenRenderbuffers(1, &r.msDepth)
 	gl.BindRenderbuffer(gl.RENDERBUFFER, r.msDepth)
-	gl.RenderbufferStorageMultisample(gl.RENDERBUFFER, 4, gl.DEPTH_COMPONENT24, w, h)
+	gl.RenderbufferStorageMultisample(gl.RENDERBUFFER, r.samples, gl.DEPTH_COMPONENT24, w, h)
 	gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, r.msDepth)
 	if st := gl.CheckFramebufferStatus(gl.FRAMEBUFFER); st != gl.FRAMEBUFFER_COMPLETE {
 		panic(fmt.Sprintf("scene framebuffer incomplete: 0x%x", st))
 	}
-	r.scene = newTarget(w, h, true)
+	r.scene = newTarget(w, h, r.color)
 	for i := 0; i < 2; i++ {
-		r.half[i] = newTarget(max(w/2, 1), max(h/2, 1), true)
-		r.quarter[i] = newTarget(max(w/4, 1), max(h/4, 1), true)
+		r.half[i] = newTarget(max(w/2, 1), max(h/2, 1), r.color)
+		r.quarter[i] = newTarget(max(w/4, 1), max(h/4, 1), r.color)
 	}
 	if r.toFinal {
-		r.final = newTarget(w, h, false)
+		r.final = newTarget(w, h, fmtLDR)
 	}
 }
 
@@ -648,7 +711,7 @@ func (r *Renderer) Draw(g *Game) {
 		r.final.bind()
 	} else {
 		gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-		gl.Viewport(0, 0, r.w, r.h)
+		gl.Viewport(0, 0, r.outW, r.outH) // scales a smaller scene up; the HUD then draws at full resolution
 	}
 	r.comp.use()
 	r.comp.i1("uScene", 0)

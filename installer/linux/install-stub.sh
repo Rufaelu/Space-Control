@@ -2,7 +2,8 @@
 # Space Control installer for Linux. Self-extracting: the game files are
 # appended to this script as a tar.gz archive after the __PAYLOAD__ line.
 #
-#   sh SpaceControl-linux-x86_64-installer.run [--name YOUR_NAME] [--uninstall]
+#   sh SpaceControl-linux-x86_64-installer.run [--uninstall]
+# The game asks for the pilot's name itself the first time it starts.
 set -eu
 
 : "${HOME:?HOME is not set}"
@@ -32,10 +33,8 @@ remove_install() {
     fi
 }
 
-NAME=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --name) NAME="${2:-}"; shift 2 ;;
         --uninstall) remove_install; exit 0 ;;
         -h|--help) sed -n '2,6p' "$0"; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -48,25 +47,12 @@ echo "    S P A C E   C O N T R O L"
 echo "  ============================="
 echo
 
-# --- ask for the pilot's name (used in-game to congratulate them) ---
-if [ -z "$NAME" ]; then
-    if [ -r /dev/tty ] && [ -t 1 ]; then
-        printf "  What is your name, pilot? "
-        read -r NAME < /dev/tty || NAME=""
-    fi
-    [ -n "$NAME" ] || NAME="${USER:-PILOT}"
-fi
-# keep what the game's font can draw: letters, digits, space, dash; max 12
-NAME=$(printf '%s' "$NAME" | tr '[:lower:]' '[:upper:]' | tr -cd 'A-Z0-9 -' | cut -c1-12)
-[ -n "$NAME" ] || NAME=PILOT
-
 # --- unpack (songs already in the music folder are left alone) ---
-mkdir -p "$DATA" "$CONF" "$(dirname "$LINK")" "$(dirname "$DESKTOP")"
+mkdir -p "$DATA" "$(dirname "$LINK")" "$(dirname "$DESKTOP")"
 LINE=$(awk '/^__PAYLOAD__$/ { print NR + 1; exit }' "$0")
 tail -n +"$LINE" "$0" | tar -xz -C "$DATA"
 chmod +x "$DATA/SpaceControl"
 mkdir -p "$DATA/music"
-printf '%s\n' "$NAME" > "$CONF/name"
 
 # --- launcher, menu entry, uninstaller ---
 ln -sf "$DATA/SpaceControl" "$LINK"
@@ -90,7 +76,7 @@ cp "$0" "$DATA/installer.run"
 printf '#!/bin/sh\nexec sh "%s/installer.run" --uninstall\n' "$DATA" > "$DATA/uninstall.sh"
 chmod +x "$DATA/uninstall.sh"
 
-echo "  Installed for $NAME."
+echo "  Installed. The game asks for your pilot name when it first starts."
 echo "    Game:       $DATA/SpaceControl"
 echo "    Start it:   $APP   (or find Space Control in your applications menu)"
 echo "    Your music: $DATA/music"

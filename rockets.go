@@ -128,6 +128,7 @@ func (g *Game) fireRocket() {
 	p.Rockets--
 	p.rocketCD = rocketCooldown
 	sfx(sfxRocket, 1)
+	g.buzz(0.45, 35)
 	g.addPart(Particle{Pos: pos, Col: V3{1, 0.7, 0.3}, Size: 9, Life: 0.12, Max: 0.12, Bright: 4})
 }
 
