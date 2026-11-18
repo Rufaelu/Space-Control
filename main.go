@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
@@ -51,7 +52,7 @@ func run() {
 	if err := gl.Init(); err != nil {
 		panic(err)
 	}
-	sdl.GLSetSwapInterval(1)
+	pace := newPacer(window)
 
 	w, h := window.GLGetDrawableSize()
 	rend := NewRenderer(w, h, shot != "")
@@ -70,6 +71,7 @@ func run() {
 	last := time.Now()
 	for !app.quit {
 		now := time.Now()
+		pace.check()
 		dt := float32(now.Sub(last).Seconds())
 		last = now
 		if dt > 0.05 {
@@ -92,11 +94,67 @@ func run() {
 			game.SetTrack(audio.Track())
 		}
 
+		if window.GetFlags()&(sdl.WINDOW_MINIMIZED|sdl.WINDOW_HIDDEN) != 0 {
+			time.Sleep(40 * time.Millisecond) // nothing to see: keep only the sound going
+			continue
+		}
 		w, h := window.GLGetDrawableSize()
 		rend.resize(w, h)
 		rend.Draw(game)
 		hud.Draw(game)
 		window.GLSwap()
+		fps := 60
+		if game.State == statePaused {
+			fps = 30 // a still picture behind the menu
+		}
+		pace.wait(now, fps)
+	}
+}
+
+// pacer holds the game to 60 frames a second. Fast screens (120 Hz and up)
+// would otherwise have it draw every frame twice as often for nothing, and
+// on a laptop's built-in graphics that is most of the heat and battery.
+type pacer struct {
+	win      *sdl.Window
+	interval int
+	frames   int
+}
+
+func newPacer(win *sdl.Window) *pacer {
+	p := &pacer{win: win}
+	p.frames = -1
+	p.check()
+	return p
+}
+
+// check matches vsync to the screen now and then (the window may have moved
+// to another monitor): every refresh at 60 Hz, every other one at 120 Hz.
+func (p *pacer) check() {
+	p.frames++
+	if p.frames%120 != 0 {
+		return
+	}
+	n := 1
+	if idx, err := p.win.GetDisplayIndex(); err == nil {
+		if mode, err := sdl.GetCurrentDisplayMode(idx); err == nil && mode.RefreshRate > 0 {
+			n = max(1, int(math.Round(float64(mode.RefreshRate)/60)))
+		}
+	}
+	if n != p.interval {
+		if sdl.GLSetSwapInterval(n) != nil {
+			sdl.GLSetSwapInterval(1)
+		}
+		p.interval = n
+	}
+}
+
+// wait sleeps out the rest of a frame begun at start, for when vsync is off
+// or not honoured. It aims a little short so that, when vsync does work, it
+// sets the pace and this never sleeps into the next refresh.
+func (p *pacer) wait(start time.Time, fps int) {
+	frame := time.Second/time.Duration(fps) - 1500*time.Microsecond
+	if d := frame - time.Since(start); d > 0 {
+		time.Sleep(d)
 	}
 }
 
@@ -121,7 +179,7 @@ func runShot(app *App, path string) {
 	if !menu {
 		g.Reset()
 		if v, err := strconv.ParseFloat(os.Getenv("SC_SHOT_YAW"), 32); err == nil {
-			g.P.Yaw = float32(v)
+			g.P.Rot = yawQuat(float32(v))
 		}
 		g.waveT = 0.2
 		if v, err := strconv.Atoi(os.Getenv("SC_SHOT_WAVE")); err == nil {
@@ -158,16 +216,12 @@ func runShot(app *App, path string) {
 		g.Update(dt, in)
 		if t := app.touch; t != nil {
 			t.layout(float32(r.w), float32(r.h), hud.scale(float32(r.h)))
-			// SC_SHOT_PRESS=1 shows a thumb on the stick and on FIRE; =boost pushes
-			// the stick into its boost zone. SC_SHOT_TRACK=1 holds TRACK for the last second.
+			// SC_SHOT_PRESS=1 shows a thumb on the stick and on FIRE.
+			// SC_SHOT_TRACK=1 holds TRACK for the last second.
 			W, H, hs := float32(r.w), float32(r.h), hud.scale(float32(r.h))
 			if press := os.Getenv("SC_SHOT_PRESS"); press != "" && i == int(secs*60)-1 {
 				t.Down(1, W*0.12, H*0.72)
-				if press == "boost" {
-					t.Move(1, W*0.125, H*0.72-stickRadius*hs*1.5)
-				} else {
-					t.Move(1, W*0.14, H*0.62)
-				}
+				t.Move(1, W*0.14, H*0.62)
 				fx, fy, _ := touchButton(tbFire, W, H, hs)
 				t.Down(2, fx, fy)
 			}

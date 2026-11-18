@@ -96,8 +96,10 @@ const PROGRAM_POINT_SIZE = 0x8642 // not in this API
 var Ptr = impl.Ptr
 var PtrOffset = impl.PtrOffset
 
+const R11F_G11F_B10F = impl.R11F_G11F_B10F
 const READ_FRAMEBUFFER = impl.READ_FRAMEBUFFER
 const RENDERBUFFER = impl.RENDERBUFFER
+const RGB = impl.RGB
 const RGBA = impl.RGBA
 const RGBA16F = impl.RGBA16F
 const RGBA8 = impl.RGBA8

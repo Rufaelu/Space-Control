@@ -39,7 +39,8 @@ func platformInit() {
 	if p := sdl.AndroidGetInternalStoragePath(); p != "" {
 		os.Setenv("XDG_CONFIG_HOME", p)
 	}
-	sdl.SetHint(sdl.HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight")
+	// one fixed landscape: turning the phone over must not flip the picture mid-fight
+	sdl.SetHint(sdl.HINT_ORIENTATIONS, "LandscapeLeft")
 	sdl.SetHint(sdl.HINT_TOUCH_MOUSE_EVENTS, "0") // touches are handled as touches
 	sdl.SetHint("SDL_MOUSE_TOUCH_EVENTS", "0")
 	sdl.SetHint("SDL_ANDROID_TRAP_BACK_BUTTON", "1") // Back pauses instead of closing the app

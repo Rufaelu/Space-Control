@@ -45,7 +45,23 @@ type voice struct {
 	vol, phase, filt float32
 	pan              float32
 	lpc              float32 // low-pass coefficient for tonal voices, 0 = unfiltered
+	f, fmul          float32 // current frequency, and its change per sample along the sweep
+	nc               float32 // noise filter coefficient, refreshed every few samples
+	n                int     // samples played
 }
+
+// sine table: sinT(phase) for phase in turns (0..1), much cheaper per sample
+// than math.Sin and indistinguishable at these volumes
+const sineN = 4096
+
+var sineTab = func() (t [sineN + 1]float32) {
+	for i := range t {
+		t[i] = float32(math.Sin(2 * math.Pi * float64(i) / sineN))
+	}
+	return
+}()
+
+func sinT(ph float32) float32 { return sineTab[int(ph*sineN)&(sineN-1)] }
 
 // engineDef is the timbre of one class of ship engine.
 type engineDef struct {
@@ -359,6 +375,7 @@ func (a *Audio) render(n int) []byte {
 		coef[i] = lpCoef(d.cutoff)
 	}
 	custom := a.music.Active()
+	var sc, nc float32
 
 	for i := 0; i < n; i++ {
 		var left, right float32
@@ -388,12 +405,15 @@ func (a *Audio) render(n int) []byte {
 		a.bo += (a.boost - a.bo) * smooth
 		a.on += (a.shipOn - a.on) * smooth
 		if a.on > 0.001 {
+			if i&15 == 0 { // the filters follow thrust and boost slowly; 16 samples apart is plenty
+				sc, nc = lpCoef(240+700*a.th+1500*a.bo), lpCoef(500+1500*a.th+4000*a.bo)
+			}
 			f := 46 + 44*a.th + 60*a.bo
 			a.sph1 = wrap(a.sph1 + f*dt)
 			a.sph2 = wrap(a.sph2 + f*2.013*dt)
 			raw := (a.sph1*2 - 1) + 0.6*(a.sph2*2-1)
-			a.sfilt += (raw - a.sfilt) * lpCoef(240+700*a.th+1500*a.bo)
-			a.nfilt += (rand.Float32()*2 - 1 - a.nfilt) * lpCoef(500+1500*a.th+4000*a.bo)
+			a.sfilt += (raw - a.sfilt) * sc
+			a.nfilt += (rand.Float32()*2 - 1 - a.nfilt) * nc
 			s := a.sfilt*(0.16+0.10*a.th+0.12*a.bo) + a.nfilt*(0.05+0.18*a.th+0.55*a.bo)
 			mixIn(s*a.on*engine, 0)
 		}
@@ -409,7 +429,7 @@ func (a *Audio) render(n int) []byte {
 			l.pt += (l.pitch - l.pt) * smooth
 			d := &engineDefs[k]
 			l.lfo = wrap(l.lfo + d.lfoHz*dt)
-			lfo := float32(math.Sin(float64(l.lfo) * 2 * math.Pi))
+			lfo := sinT(l.lfo)
 			f := d.freq * l.pt * (1 + d.vibrato*lfo)
 			l.ph1 = wrap(l.ph1 + f*dt)
 			l.ph2 = wrap(l.ph2 + f*d.ratio2*dt)
@@ -432,11 +452,16 @@ func (a *Audio) render(n int) []byte {
 				continue
 			}
 			k := v.t / v.dur
-			f := v.f0 * float32(math.Pow(float64(v.f1/v.f0), float64(k)))
+			if v.n == 0 { // the sweep is exponential: one multiply per sample
+				v.f = v.f0
+				v.fmul = float32(math.Pow(float64(v.f1/v.f0), float64(dt/v.dur)))
+			}
+			f := v.f
+			v.f *= v.fmul
 			var s float32
 			switch v.wave {
 			case wSine:
-				s = float32(math.Sin(float64(v.phase) * 2 * math.Pi))
+				s = sinT(v.phase)
 			case wSquare:
 				s = 0.7
 				if v.phase > 0.5 {
@@ -445,7 +470,10 @@ func (a *Audio) render(n int) []byte {
 			case wSaw:
 				s = (v.phase*2 - 1) * 0.8
 			case wNoise:
-				v.filt += (rand.Float32()*2 - 1 - v.filt) * lpCoef(f)
+				if v.n&7 == 0 {
+					v.nc = lpCoef(f)
+				}
+				v.filt += (rand.Float32()*2 - 1 - v.filt) * v.nc
 				s = v.filt * 1.6
 			}
 			if v.lpc > 0 {
@@ -459,6 +487,7 @@ func (a *Audio) render(n int) []byte {
 			}
 			mixIn(s*env*v.vol, v.pan)
 			v.t += dt
+			v.n++
 		}
 
 		for c, s := range [2]float32{left, right} {

@@ -37,7 +37,7 @@ ANDROID (phone with Android 11 or newer)
   3. Open Space Control, allow it to read your music, and type your name.
 
   Hold the phone sideways. Left thumb: the joystick flies (up forward, down
-  back, left and right slide; push it hard forward to boost). Drag anywhere
+  back, left and right slide). Drag anywhere
   else to turn. Slide your thumb on FIRE to aim while shooting. Hold TRACK to
   swing onto the nearest enemy. The pause menu has MOTION AIM (tilt or gyro
   turning), AIM ASSIST, AUTO FIRE, VIBRATION, TURN SPEED and RECENTER TILT.

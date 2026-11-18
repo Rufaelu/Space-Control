@@ -14,8 +14,7 @@ import (
 // Phone controls, held in landscape:
 //
 //   - a joystick on the left, which appears under the thumb: up flies forward,
-//     down back, left and right slide. Pushing it hard forward, past its ring,
-//     boosts (like sprinting in mobile shooters).
+//     down back, left and right slide.
 //   - dragging anywhere else on the screen turns the ship (like the mouse);
 //     quick flicks turn further than slow, careful drags.
 //   - FIRE also turns the ship as the thumb slides on it, so shooting never
@@ -44,7 +43,6 @@ const touchUI = 1.35
 const (
 	stickRadius = 88   // how far the knob travels
 	stickDead   = 0.12 // fraction of the travel that does nothing
-	stickBoost  = 1.3  // a push this far past the ring, straight ahead, boosts
 	stickFollow = 1.7  // further than this, the stick follows the thumb
 	stickZone   = 0.42 // share of the screen's width, from the left, that starts the stick
 	dragTurn    = 0.22 // degrees of turn per HUD unit dragged, at turn speed 5
@@ -91,21 +89,19 @@ const (
 )
 
 type Touch struct {
-	fingers   map[sdl.FingerID]*finger
-	lookX     float32 // drag since the last frame, HUD units
-	lookY     float32
-	tapped    [tbCount]bool // pressed since the last frame
-	W, H, s   float32       // screen in HUD pixels, and the HUD scale
-	StickOn   bool
-	StickX    float32 // -1..1, right
-	StickY    float32 // -1..1, forward
-	StickPush float32 // how far the thumb is from the stick's centre, in ring radii
-	Boosting  bool    // the stick is pushed hard forward
-	BaseX     float32 // where the joystick is drawn
-	BaseY     float32
-	KnobX     float32
-	KnobY     float32
-	Held      [tbCount]bool
+	fingers map[sdl.FingerID]*finger
+	lookX   float32 // drag since the last frame, HUD units
+	lookY   float32
+	tapped  [tbCount]bool // pressed since the last frame
+	W, H, s float32       // screen in HUD pixels, and the HUD scale
+	StickOn bool
+	StickX  float32 // -1..1, right
+	StickY  float32 // -1..1, forward
+	BaseX   float32 // where the joystick is drawn
+	BaseY   float32
+	KnobX   float32
+	KnobY   float32
+	Held    [tbCount]bool
 }
 
 func newTouch() *Touch { return &Touch{fingers: map[sdl.FingerID]*finger{}} }
@@ -185,7 +181,7 @@ func (t *Touch) Reset() {
 	for id := range t.fingers {
 		t.fingers[id] = &finger{role: roleNone}
 	}
-	t.StickOn, t.StickX, t.StickY, t.StickPush, t.Boosting = false, 0, 0, 0, false
+	t.StickOn, t.StickX, t.StickY = false, 0, 0
 	t.lookX, t.lookY = 0, 0
 	t.tapped = [tbCount]bool{}
 	t.update()
@@ -193,7 +189,7 @@ func (t *Touch) Reset() {
 
 func (t *Touch) update() {
 	t.Held = [tbCount]bool{}
-	t.StickX, t.StickY, t.StickPush, t.Boosting = 0, 0, 0, false
+	t.StickX, t.StickY = 0, 0
 	for _, f := range t.fingers {
 		switch {
 		case f.role < tbCount:
@@ -211,9 +207,6 @@ func (t *Touch) update() {
 				t.BaseX, t.BaseY = f.ox, f.oy
 				dx, dy, l = f.x-f.ox, f.y-f.oy, stickFollow*R
 			}
-			t.StickPush = l / R
-			// pushed hard, straight ahead: boost
-			t.Boosting = l > stickBoost*R && -dy > l*0.82
 			if l > R {
 				dx, dy = dx/l*R, dy/l*R
 				l = R

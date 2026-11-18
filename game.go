@@ -104,8 +104,10 @@ var puNames = [...]string{"SHIELD RESTORED", "COOLANT FLUSH", "RAPID FIRE", "ROC
 
 type Player struct {
 	Pos, Vel         V3
-	Yaw, Pitch, Roll float32
+	Rot              mgl.Quat // orientation: takes the model's -Z (nose), +Y (top) and +X (right wing) into the world
+	Roll             float32  // visual bank into turns, on top of Rot
 	yawRate, pitRate float32
+	pullT            float32 // > 0 while the player is pitching: hold the wings level, but upright or inverted alike
 	Shields          int
 	Invuln           float32
 	Heat             float32
@@ -132,12 +134,58 @@ func (p *Player) flipK() float32 {
 // bank is the ship's total roll angle, including the flip's barrel roll.
 func (p *Player) bank() float32 { return p.Roll - p.flipDir*2*math.Pi*p.flipK() }
 
-func (p *Player) Front() V3 {
-	y, pt := float64(mgl.DegToRad(p.Yaw)), float64(mgl.DegToRad(p.Pitch))
-	return V3{float32(math.Cos(y) * math.Cos(pt)), float32(math.Sin(pt)), float32(math.Sin(y) * math.Cos(pt))}
+// Front, Right and Up are the ship's own axes. Nothing holds the nose below
+// vertical: pull up long enough and the ship loops right over.
+func (p *Player) Front() V3 { return p.Rot.Rotate(V3{0, 0, -1}) }
+func (p *Player) Right() V3 { return p.Rot.Rotate(V3{1, 0, 0}) }
+func (p *Player) Up() V3    { return p.Rot.Rotate(V3{0, 1, 0}) }
+
+// yawQuat faces the ship along a compass heading in degrees, level
+// (-90 looks down -Z, 0 down +X).
+func yawQuat(yaw float32) mgl.Quat {
+	return mgl.QuatRotate(mgl.DegToRad(-(yaw + 90)), V3{0, 1, 0})
 }
-func (p *Player) Right() V3 { return norm(p.Front().Cross(V3{0, 1, 0})) }
-func (p *Player) Up() V3    { return norm(p.Right().Cross(p.Front())) }
+
+// turn rotates the ship about its own axes: yaw (right is positive) about
+// its up, then pitch (nose up is positive), in degrees.
+func (p *Player) turn(yaw, pitch float32) {
+	q := p.Rot.Mul(mgl.QuatRotate(mgl.DegToRad(-yaw), V3{0, 1, 0})).
+		Mul(mgl.QuatRotate(mgl.DegToRad(pitch), V3{1, 0, 0}))
+	p.Rot = q.Normalize()
+}
+
+// rollAngle is how far the ship is rolled from upright, in radians:
+// positive is the right wing down, ±pi is upside down.
+func (p *Player) rollAngle() float32 {
+	r, u := p.Right(), p.Up()
+	return float32(math.Atan2(float64(-r.Y()), float64(u.Y())))
+}
+
+// level rolls the ship back toward upright, the way a pilot would after a
+// manoeuvre. While the player is still pulling it only levels the wings,
+// upright or inverted, so a loop keeps going round; once they let go the
+// ship rolls the rest of the way upright, which turns a half loop into an
+// Immelmann: climb, over the top, and away the other way, upright.
+func (p *Player) level(dt float32) {
+	f := p.Front()
+	// pointing straight up or down there is no "upright" to roll toward
+	k := mgl.Clamp((1-float32(math.Abs(float64(f.Y()))))*5, 0, 1)
+	if k == 0 {
+		return
+	}
+	a := p.rollAngle()
+	rate := float32(2.6) // rad/s
+	if p.pullT > 0 {
+		if a > math.Pi/2 {
+			a -= math.Pi
+		} else if a < -math.Pi/2 {
+			a += math.Pi
+		}
+		rate = 1.5
+	}
+	step := mgl.Clamp(a*6*dt, -rate*dt, rate*dt) * k
+	p.Rot = p.Rot.Mul(mgl.QuatRotate(-step, V3{0, 0, -1})).Normalize()
+}
 
 // orient builds a rotation taking model -Z to fwd.
 func orient(fwd, upHint V3) mgl.Mat4 {
@@ -153,7 +201,7 @@ func orient(fwd, upHint V3) mgl.Mat4 {
 func (p *Player) Model() mgl.Mat4 {
 	lead := mgl.HomogRotate3DY(mgl.DegToRad(-p.yawRate * 0.5)).Mul4(mgl.HomogRotate3DX(mgl.DegToRad(p.pitRate * 0.5)))
 	return mgl.Translate3D(p.Pos[0], p.Pos[1], p.Pos[2]).
-		Mul4(orient(p.Front(), V3{0, 1, 0})).Mul4(lead).Mul4(mgl.HomogRotate3DZ(p.bank()))
+		Mul4(p.Rot.Mat4()).Mul4(lead).Mul4(mgl.HomogRotate3DZ(p.bank()))
 }
 
 type Enemy struct {
@@ -352,7 +400,7 @@ func NewGame() *Game {
 }
 
 func (g *Game) Reset() {
-	g.P = Player{Yaw: -90, Shields: maxShields, Rockets: diffs[g.Diff].rockets}
+	g.P = Player{Rot: yawQuat(-90), Shields: maxShields, Rockets: diffs[g.Diff].rockets}
 	g.Enemies, g.Shots, g.Parts, g.Pickups = nil, nil, nil, nil
 	g.Rockets, g.Lock, g.Tracked = nil, nil, nil
 	g.Score, g.Combo, g.ComboT, g.Wave, g.Kills = 0, 0, 0, 0, 0
@@ -423,12 +471,15 @@ func (g *Game) explode(pos V3, scale float32, col V3) {
 	sfxPos(sfxExplode, float32(math.Min(1.2, float64(0.55+0.3*scale))), pos)
 	g.addPart(Particle{Pos: pos, Col: V3{1, 0.95, 0.85}, Size: 26 * scale, Life: 0.16, Max: 0.16, Bright: 6})
 	g.addPart(Particle{Pos: pos, Col: col, Size: 3, Grow: 150 * scale, Life: 0.55, Max: 0.55, Bright: 2.5, Shape: 1})
-	for i := 0; i < int(14*scale)+6; i++ {
+	// fireball: a few big puffs. Every puff is a sprite blended over everything
+	// behind it, and up close they fill the screen, so a phone's graphics chip
+	// stalls on a dozen of them; fewer, brighter puffs look the same.
+	for i := 0; i < int(7*scale)+3; i++ {
 		l := 0.45 + rnd()*0.5
 		g.addPart(Particle{
 			Pos: pos.Add(rndDir().Mul(3 * scale)), Vel: rndDir().Mul(rnd() * 30 * scale),
 			Col: V3{1.0, 0.45 + rnd()*0.3, 0.12}, Size: (6 + rnd()*6) * scale, Grow: 6 * scale,
-			Life: l, Max: l, Drag: 1.5, Bright: 2.2,
+			Life: l, Max: l, Drag: 1.5, Bright: 3.3,
 		})
 	}
 	for i := 0; i < int(34*scale)+10; i++ {
@@ -546,7 +597,7 @@ func (g *Game) Update(dt float32, in Input) {
 	g.NoteT -= dt
 
 	if g.State == stateMenu || g.State == stateName {
-		g.P.Yaw += 5 * dt
+		g.P.Rot = mgl.QuatRotate(mgl.DegToRad(-5*dt), V3{0, 1, 0}).Mul(g.P.Rot).Normalize()
 		g.emitPlayerTrail(dt)
 		g.updateAsteroids(dt)
 		g.updateParticles(dt)
@@ -572,10 +623,12 @@ func (g *Game) Look(dx, dy float32) {
 		return
 	}
 	p := &g.P
-	p.Yaw += dx
-	p.Pitch = mgl.Clamp(p.Pitch-dy, -85, 85)
+	p.turn(dx, -dy)
 	p.yawRate += dx
 	p.pitRate -= dy
+	if math.Abs(float64(dy)) > 0.02 {
+		p.pullT = 0.35
+	}
 }
 
 func (g *Game) emitPlayerTrail(dt float32) {
@@ -611,6 +664,10 @@ func (g *Game) updatePlayer(dt float32, in Input) {
 	p.pitRate *= k
 	targetRoll := mgl.Clamp(-p.yawRate*0.09-in.Strafe*0.38, -1.0, 1.0)
 	p.Roll += (targetRoll - p.Roll) * float32(math.Min(1, float64(7*dt)))
+	p.pullT -= dt
+	if p.FlipT <= 0 {
+		p.level(dt)
+	}
 
 	// flip: barrel-roll sideways out of the line of fire; shots pass through while it lasts
 	p.FlipCD -= dt

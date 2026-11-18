@@ -27,8 +27,8 @@ const (
 	trackRange   = 1500.0
 )
 
-// aimErr returns how far the ship must turn, in yaw and pitch degrees, to
-// point straight at pos, and the distance to it.
+// aimErr returns how far the ship must turn, in degrees of yaw and pitch
+// about its own axes, to point straight at pos, and the distance to it.
 func (g *Game) aimErr(pos V3) (yaw, pitch, dist float32) {
 	p := &g.P
 	to := pos.Sub(p.Pos)
@@ -36,10 +36,8 @@ func (g *Game) aimErr(pos V3) (yaw, pitch, dist float32) {
 	if dist < 1e-3 {
 		return 0, 0, 0
 	}
-	to = to.Mul(1 / dist)
-	wantYaw := deg(math.Atan2(float64(to.Z()), float64(to.X())))
-	wantPitch := deg(math.Asin(float64(min(max(to.Y(), -1), 1))))
-	return wrapDeg(wantYaw - p.Yaw), wantPitch - p.Pitch, dist
+	x, y, z := float64(to.Dot(p.Right())), float64(to.Dot(p.Up())), float64(to.Dot(p.Front()))
+	return deg(math.Atan2(x, z)), deg(math.Atan2(y, math.Hypot(x, z))), dist
 }
 
 // offAxis is the angle between the crosshair and pos, in degrees.

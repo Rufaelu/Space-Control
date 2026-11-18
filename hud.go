@@ -769,8 +769,8 @@ func (h *HUD) drawPlay(g *Game, W, H float32, blinkOn bool) {
 	h.line(cx, cy-rad, cx, cy+rad, 1*s, fade(cCyan, 0.18))
 	sw := float64(g.Time) * 1.6
 	h.line(cx, cy, cx+rad*float32(math.Cos(sw)), cy+rad*float32(math.Sin(sw)), 1.5*s, fade(cCyan, 0.4))
-	f, rt := p.Front(), p.Right()
-	flat := norm(V3{f[0], 0, f[2]})
+	// the radar turns with the ship: ahead is up, its right wing is right
+	flat, rt := p.Front(), p.Right()
 	const rng = 900
 	blip := func(pos V3, c RGBA, size float32) {
 		rel := pos.Sub(p.Pos)
@@ -838,24 +838,6 @@ func (h *HUD) drawTouch(g *Game, W, H float32) {
 		ang := float64(k) * math.Pi / 2
 		cx, cy := float32(math.Cos(ang)), float32(math.Sin(ang))
 		h.line(t.BaseX+cx*(R-12*s), t.BaseY+cy*(R-12*s), t.BaseX+cx*(R-4*s), t.BaseY+cy*(R-4*s), 2*s, fade(cCyan, 0.6*a))
-	}
-	// the boost zone, past the top of the ring: shown as the thumb heads there
-	if t.StickOn && t.StickY > 0.5 {
-		show := min((t.StickPush-0.8)/(stickBoost-0.8), 1)
-		if show > 0 {
-			bc := fade(cAmber, 0.35+0.4*show)
-			if t.Boosting {
-				bc = cAmber
-			}
-			// just above the knob at the top of its travel
-			by := t.BaseY - R - 44*s
-			for k := float32(0); k < 2; k++ {
-				y := by - k*11*s
-				h.line(t.BaseX-14*s, y+7*s, t.BaseX, y, 3*s, bc)
-				h.line(t.BaseX, y, t.BaseX+14*s, y+7*s, 3*s, bc)
-			}
-			h.text(t.BaseX+22*s, by-9*s, 1.6*s, "BOOST", bc, 0)
-		}
 	}
 	h.disc(t.KnobX, t.KnobY, 34*s, fade(cCyan, 0.20+0.30*a))
 	h.arc(t.KnobX, t.KnobY, 34*s, 2*s, 0, 2*math.Pi, fade(cWhite, a))

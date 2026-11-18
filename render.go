@@ -137,19 +137,22 @@ type Target struct {
 	w, h     int32
 }
 
-// colorFormat is an internal texture format and the pixel type to upload it with.
-type colorFormat struct{ internal, typ uint32 }
+// colorFormat is an internal texture format, and the format and pixel type to upload it with.
+type colorFormat struct{ internal, format, typ uint32 }
 
 var (
-	fmtHDR = colorFormat{gl.RGBA16F, gl.FLOAT}
-	fmtLDR = colorFormat{gl.RGBA8, gl.UNSIGNED_BYTE}
+	// HDR in 4 bytes a pixel, half of RGBA16F: the scene never needs alpha,
+	// and on built-in laptop graphics memory traffic is most of the frame
+	fmtHDR32 = colorFormat{gl.R11F_G11F_B10F, gl.RGB, gl.FLOAT}
+	fmtHDR   = colorFormat{gl.RGBA16F, gl.RGBA, gl.FLOAT}
+	fmtLDR   = colorFormat{gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE}
 )
 
 func newTarget(w, h int32, f colorFormat) Target {
 	t := Target{w: w, h: h}
 	gl.GenTextures(1, &t.tex)
 	gl.BindTexture(gl.TEXTURE_2D, t.tex)
-	gl.TexImage2D(gl.TEXTURE_2D, 0, int32(f.internal), w, h, 0, gl.RGBA, f.typ, nil)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, int32(f.internal), w, h, 0, f.format, f.typ, nil)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -253,7 +256,7 @@ func (r *Renderer) pickFormat() {
 	for _, c := range []struct {
 		f colorFormat
 		n int32
-	}{{fmtHDR, want}, {fmtHDR, 0}, {fmtLDR, want}, {fmtLDR, 0}} {
+	}{{fmtHDR32, want}, {fmtHDR, want}, {fmtHDR32, 0}, {fmtHDR, 0}, {fmtLDR, want}, {fmtLDR, 0}} {
 		if targetWorks(c.f, c.n) {
 			r.color, r.samples = c.f, c.n
 			return
@@ -291,7 +294,7 @@ func (r *Renderer) bakeSky() {
 	gl.GenTextures(1, &r.skyTex)
 	gl.BindTexture(gl.TEXTURE_CUBE_MAP, r.skyTex)
 	for i := uint32(0); i < 6; i++ {
-		gl.TexImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X+i, 0, int32(r.color.internal), size, size, 0, gl.RGBA, r.color.typ, nil)
+		gl.TexImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X+i, 0, int32(r.color.internal), size, size, 0, r.color.format, r.color.typ, nil)
 	}
 	gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 	gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
@@ -407,7 +410,7 @@ func (r *Renderer) setCamera(g *Game) {
 	p := &g.P
 	f, rt, up := p.Front(), p.Right(), p.Up()
 	var eye, target V3
-	upVec := V3{0, 1, 0}
+	upVec := up // the camera rolls with the ship, so it can loop right over
 	r.cockpit = false
 	fov := float32(0.95)
 	if g.State == stateMenu || g.State == stateName {
@@ -596,7 +599,11 @@ func (r *Renderer) Draw(g *Game) {
 	// --- additive effects ---
 	for _, pt := range g.Parts {
 		k := pt.Life / pt.Max
-		r.billboard(pt.Pos, pt.Size, pt.Col, pt.Bright*k*float32(math.Sqrt(float64(k))), pt.Shape)
+		// near the camera a sprite grows to fill the screen, and blending a pile
+		// of those is what slows a phone down when something blows up close by;
+		// past this size it would hide the view anyway
+		size := min(pt.Size, pt.Pos.Sub(r.camPos).Len()*0.4)
+		r.billboard(pt.Pos, size, pt.Col, pt.Bright*k*float32(math.Sqrt(float64(k))), pt.Shape)
 	}
 	pm := p.Model()
 	for _, s := range g.Shots {

@@ -512,7 +512,7 @@ func (a *App) input(dt float32) Input {
 				g.AssistPull(dt)
 			}
 		}
-		in.Boost = t.Held[tbBoost] || t.Boosting
+		in.Boost = t.Held[tbBoost]
 		in.Rocket = t.Held[tbRocket]
 		in.FlipL = t.Held[tbFlipL]
 		in.FlipR = t.Held[tbFlipR]

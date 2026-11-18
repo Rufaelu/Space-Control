@@ -27,6 +27,7 @@ Navigate a vast starfield, manage your weapon heat, and defend your ship against
 - 🎯 **Homing rockets** — lock on and fire; on Hard, enemy ships launch rockets at you too (shoot them down or flip through them)
 - 🙌 **Knows your name** — asks once, then congratulates you by name after every wave
 - 🔄 **Flip manoeuvre** — a sideways barrel roll, left or right, that lets shots pass through
+- 🌀 **Loops** — nothing stops the nose at straight up: keep pulling to loop right round, or let go at the top and the ship rolls upright heading back the way it came, behind whoever was chasing you
 - 👁 **Two views** — chase camera or first-person cockpit
 - 🏆 **Combo multiplier and saved high score**
 - 🔊 **Synthesized stereo sound** — every ship class has its own engine note, placed left/right and pitched by how fast it is closing; plus lasers, explosions and alerts
@@ -44,7 +45,7 @@ Navigate a vast starfield, manage your weapon heat, and defend your ship against
 | Key | Action |
 |-----|--------|
 | **W / A / S / D** | Thrust (Forward, Left, Back, Right) |
-| **Mouse Move** | Aim / Steer |
+| **Mouse Move** | Aim / Steer (keep pulling up or down to loop) |
 | **Space / Left Click** | Fire Lasers |
 | **Shift** | Boost |
 | **Alt / Right Click** | Fire a homing rocket |
@@ -136,7 +137,7 @@ On the phone:
 
 | Control | Action |
 |---------|--------|
-| **Joystick** (left thumb) | Appears under the thumb. Up forward, down back, left and right slide; push it hard forward, past the ring, to boost |
+| **Joystick** (left thumb) | Appears under the thumb. Up forward, down back, left and right slide |
 | **Drag** anywhere else | Turn the ship (quick flicks turn further than slow drags) |
 | **FIRE** | Hold to shoot; slide the thumb on it to aim at the same time. The ring shows weapon heat |
 | **TRACK** | Hold to swing the ship onto the nearest enemy, even one behind you |
